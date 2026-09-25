@@ -1,8 +1,7 @@
-import {
-  Feather
-} from "@expo/vector-icons";
+import { Feather } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import React, { useState } from "react";
+import * as SQLite from 'expo-sqlite';
+import React, { useEffect, useState } from "react";
 import {
   SafeAreaView,
   ScrollView,
@@ -12,6 +11,10 @@ import {
   TouchableOpacity,
   View
 } from "react-native";
+
+// ─── Base de Datos ────────────────────────────────────────────────────────────
+// Se abre la base de datos o se crea el archivo si es la primera vez
+const db = SQLite.openDatabaseSync('mi_base_datos.db');
 
 // ─── Componentes Reutilizables ────────────────────────────────────────────────
 function ProgressBar({ percent, color }: { percent: number; color: string }) {
@@ -305,23 +308,90 @@ function ScreenSalarySetup({ onNext }: { onNext: () => void }) {
   );
 }
 
-// ─── 2: Dashboard ─────────────────────────────────────────────────────────────
+// ─── 2: Dashboard (BARRAS DE PROGRESO Y DATOS REALES) ─────────────────────────
 function ScreenDashboard({ onNav }: { onNav: (i: number) => void }) {
-  const spent = 490000;
-  const total = 850000;
-  const pct = Math.round((spent / total) * 100);
-  const remaining = total - spent;
+  // Sueldo fijo para los cálculos
+  const sueldoTotal = 850000;
 
-  const cats = [
-    { name: "Alimentación", icon: "fast-food-outline", spent: 112000, limit: 160000, color: "#7E57C2" },
-    { name: "Transporte", icon: "car-outline", spent: 74000, limit: 80000, color: "#F9A825" },
-    { name: "Compras", icon: "bag-handle-outline", spent: 158000, limit: 130000, color: "#C62828" },
-    { name: "Salud", icon: "heart-outline", spent: 32000, limit: 55000, color: "#2E7D32" },
+  // Variables simples para guardar las listas y los totales
+  const [listaGastos, setListaGastos] = useState<any[]>([]);
+  const [totalGastado, setTotalGastado] = useState(0);
+  
+  // Variables individuales para cada categoría (Estructura para principiantes)
+  const [gastoComida, setGastoComida] = useState(0);
+  const [gastoTransporte, setGastoTransporte] = useState(0);
+  const [gastoCompras, setGastoCompras] = useState(0);
+  const [gastoSalud, setGastoSalud] = useState(0);
+
+  const leerGastosReales = () => {
+    // 1. Aseguramos la tabla y leemos los datos
+    db.execSync('CREATE TABLE IF NOT EXISTS gastos (id INTEGER PRIMARY KEY AUTOINCREMENT, monto TEXT, categoria TEXT, icono TEXT);');
+    const registros = db.getAllSync('SELECT * FROM gastos ORDER BY id DESC;');
+    setListaGastos(registros);
+
+    // 2. Sumamos todo manualmente usando un ciclo básico
+    let sumaTotal = 0;
+    let sumaComida = 0;
+    let sumaTransporte = 0;
+    let sumaCompras = 0;
+    let sumaSalud = 0;
+
+    for (let i = 0; i < registros.length; i++) {
+      // Convertimos el texto a número
+      let montoNumero = parseInt(registros[i].monto);
+      
+      // Si el monto no es válido, lo dejamos en 0 para no romper la suma
+      if (isNaN(montoNumero)) {
+        montoNumero = 0;
+      }
+      
+      // Sumamos al gran total
+      sumaTotal = sumaTotal + montoNumero;
+
+      // Sumamos a la categoría correspondiente
+      if (registros[i].categoria === "Comida" || registros[i].categoria === "Alimentación") {
+        sumaComida = sumaComida + montoNumero;
+      }
+      if (registros[i].categoria === "Transporte") {
+        sumaTransporte = sumaTransporte + montoNumero;
+      }
+      if (registros[i].categoria === "Compras") {
+        sumaCompras = sumaCompras + montoNumero;
+      }
+      if (registros[i].categoria === "Salud") {
+        sumaSalud = sumaSalud + montoNumero;
+      }
+    }
+
+    // 3. Guardamos los resultados en las variables de estado
+    setTotalGastado(sumaTotal);
+    setGastoComida(sumaComida);
+    setGastoTransporte(sumaTransporte);
+    setGastoCompras(sumaCompras);
+    setGastoSalud(sumaSalud);
+  };
+
+  useEffect(() => {
+    leerGastosReales();
+  }, []);
+
+  // Cálculos para la tarjeta principal
+  let porcentajeTotal = Math.round((totalGastado / sueldoTotal) * 100);
+  let saldoDisponible = sueldoTotal - totalGastado;
+
+  // Arreglo para dibujar las barras de colores que vimos en el diseño
+  const categorias = [
+    { name: "Alimentación", spent: gastoComida, limit: 160000, color: "#7E57C2" },
+    { name: "Transporte", spent: gastoTransporte, limit: 80000, color: "#F9A825" },
+    { name: "Compras", spent: gastoCompras, limit: 130000, color: "#C62828" },
+    { name: "Salud", spent: gastoSalud, limit: 55000, color: "#2E7D32" },
   ];
 
   return (
     <View style={{ flex: 1 }}>
       <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 20 }}>
+        
+        {/* --- CABECERA Y TARJETA MORADA --- */}
         <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
           <View>
             <Text style={{ fontSize: 13, color: "#6B6580" }}>Buenos días,</Text>
@@ -329,14 +399,7 @@ function ScreenDashboard({ onNav }: { onNav: (i: number) => void }) {
           </View>
           <TouchableOpacity
             onPress={() => onNav(6)}
-            style={{
-              width: 40,
-              height: 40,
-              borderRadius: 12,
-              backgroundColor: "#fff",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
+            style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: "#fff", alignItems: "center", justifyContent: "center" }}
           >
             <Feather name="bell" size={20} color="#512DA8" />
           </TouchableOpacity>
@@ -349,22 +412,23 @@ function ScreenDashboard({ onNav }: { onNav: (i: number) => void }) {
           <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
             <View>
               <Text style={{ color: "rgba(255,255,255,0.7)", fontSize: 11 }}>Sueldo · CLP</Text>
-              <Text style={{ color: "#fff", fontSize: 24, fontWeight: "700" }}>${total.toLocaleString("es-CL")}</Text>
+              <Text style={{ color: "#fff", fontSize: 24, fontWeight: "700" }}>${sueldoTotal.toLocaleString("es-CL")}</Text>
               <View style={{ flexDirection: "row", gap: 14, marginTop: 12 }}>
                 <View>
                   <Text style={{ color: "rgba(255,255,255,0.6)", fontSize: 10 }}>Gastado</Text>
-                  <Text style={{ color: "#fff", fontSize: 14, fontWeight: "600" }}>${spent.toLocaleString("es-CL")}</Text>
+                  <Text style={{ color: "#fff", fontSize: 14, fontWeight: "600" }}>${totalGastado.toLocaleString("es-CL")}</Text>
                 </View>
                 <View>
                   <Text style={{ color: "rgba(255,255,255,0.6)", fontSize: 10 }}>Disponible</Text>
-                  <Text style={{ color: "#A5F3AE", fontSize: 14, fontWeight: "600" }}>${remaining.toLocaleString("es-CL")}</Text>
+                  <Text style={{ color: "#A5F3AE", fontSize: 14, fontWeight: "600" }}>${saldoDisponible.toLocaleString("es-CL")}</Text>
                 </View>
               </View>
             </View>
-            <MiniBadge percent={pct} color="rgba(255,255,255,0.85)" />
+            <MiniBadge percent={porcentajeTotal} color="rgba(255,255,255,0.85)" />
           </View>
         </LinearGradient>
 
+        {/* --- SECCIÓN 1: BARRAS DE PROGRESO DE CATEGORÍAS --- */}
         <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 12 }}>
           <Text style={{ fontSize: 15, fontWeight: "700" }}>Categorías</Text>
           <TouchableOpacity onPress={() => onNav(3)}>
@@ -372,21 +436,46 @@ function ScreenDashboard({ onNav }: { onNav: (i: number) => void }) {
           </TouchableOpacity>
         </View>
 
-        <View style={{ gap: 10 }}>
-          {cats.map((c) => {
+        <View style={{ gap: 10, marginBottom: 20 }}>
+          {categorias.map((c) => {
             const p = Math.round((c.spent / c.limit) * 100);
-            const barColor = p >= 100 ? "#C62828" : p >= 80 ? "#F9A825" : c.color;
+            const colorBarra = p >= 100 ? "#C62828" : p >= 80 ? "#F9A825" : c.color;
             return (
               <View key={c.name} style={{ backgroundColor: "#fff", borderRadius: 14, padding: 14 }}>
                 <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 8 }}>
                   <Text style={{ fontWeight: "600", fontSize: 14 }}>{c.name}</Text>
-                  <Text style={{ fontWeight: "700", color: barColor }}>${c.spent.toLocaleString("es-CL")}</Text>
+                  <Text style={{ fontWeight: "700", color: colorBarra }}>${c.spent.toLocaleString("es-CL")}</Text>
                 </View>
-                <ProgressBar percent={p} color={barColor} />
+                <ProgressBar percent={p} color={colorBarra} />
               </View>
             );
           })}
         </View>
+
+        {/* --- SECCIÓN 2: HISTORIAL DE GASTOS --- */}
+        <View style={{ backgroundColor: "#fff", borderRadius: 14, padding: 14 }}>
+          <Text style={{ fontSize: 16, fontWeight: "700", marginBottom: 15 }}>Historial de Gastos</Text>
+          
+          {listaGastos.length === 0 ? (
+            <Text style={{ color: "#6B6580", textAlign: "center", marginVertical: 10 }}>
+              Aún no hay gastos registrados.
+            </Text>
+          ) : (
+            listaGastos.map((gasto) => (
+              <View key={gasto.id} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderColor: '#F5F3FA' }}>
+                <Text style={{ fontSize: 24, marginRight: 15 }}>{gasto.icono}</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontWeight: 'bold', color: "#1E1B2E", fontSize: 16 }}>{gasto.categoria}</Text>
+                  <Text style={{ color: "#6B6580", fontSize: 12 }}>ID: {gasto.id}</Text>
+                </View>
+                <Text style={{ fontSize: 16, fontWeight: "700", color: "#C62828" }}>
+                  ${gasto.monto}
+                </Text>
+              </View>
+            ))
+          )}
+        </View>
+        
       </ScrollView>
       <BottomNav active={2} onNav={onNav} />
     </View>
@@ -439,6 +528,7 @@ function ScreenCategories({ onNav }: { onNav: (i: number) => void }) {
 function ScreenQuickExpense({ onNav }: { onNav: (i: number) => void }) {
   const [amount, setAmount] = useState("0");
   const [selected, setSelected] = useState(0);
+  
   const cats = [
     { name: "Comida", icon: "🍔" },
     { name: "Transporte", icon: "🚗" },
@@ -447,6 +537,7 @@ function ScreenQuickExpense({ onNav }: { onNav: (i: number) => void }) {
     { name: "Ocio", icon: "🎬" },
     { name: "Otro", icon: "➕" },
   ];
+  
   const keys = ["1", "2", "3", "4", "5", "6", "7", "8", "9", ".", "0", "⌫"];
 
   const handleKey = (k: string) => {
@@ -454,6 +545,28 @@ function ScreenQuickExpense({ onNav }: { onNav: (i: number) => void }) {
     else if (k === "." && amount.includes(".")) return;
     else if (amount === "0" && k !== ".") setAmount(k);
     else setAmount((a) => a + k);
+  };
+
+  // --- NUEVA FUNCIÓN PARA GUARDAR EN LA BASE DE DATOS ---
+  const guardarGastoReal = () => {
+    // 1. Creamos una tabla nueva específica para los gastos si no existe
+    db.execSync(
+      'CREATE TABLE IF NOT EXISTS gastos (id INTEGER PRIMARY KEY AUTOINCREMENT, monto TEXT, categoria TEXT, icono TEXT);'
+    );
+
+    // 2. Extraemos los valores exactos que el usuario eligió en la pantalla
+    let montoIngresado = amount;
+    let categoriaElegida = cats[selected].name;
+    let iconoElegido = cats[selected].icon;
+
+    // 3. Insertamos el gasto real en la tabla
+    db.runSync(
+      'INSERT INTO gastos (monto, categoria, icono) VALUES (?, ?, ?);',
+      [montoIngresado, categoriaElegida, iconoElegido]
+    );
+
+    // 4. Regresamos a la pantalla del Dashboard (pantalla número 2)
+    onNav(2);
   };
 
   return (
@@ -523,8 +636,9 @@ function ScreenQuickExpense({ onNav }: { onNav: (i: number) => void }) {
           ))}
         </View>
 
+        {/* BOTÓN ACTUALIZADO PARA LLAMAR A LA BASE DE DATOS */}
         <TouchableOpacity
-          onPress={() => onNav(2)}
+          onPress={guardarGastoReal}
           style={{
             height: 50,
             borderRadius: 14,
@@ -729,7 +843,7 @@ function ScreenProfile({ onNav }: { onNav: (i: number) => void }) {
 
 // ─── Componente Principal ─────────────────────────────────────────────────────
 export default function App() {
-  const [screen, setScreen] = useState(0);
+  const [screen, setScreen] = useState(2); // Empezamos en la 2 (Dashboard) para que lo veas rápido
 
   const renderScreen = () => {
     switch (screen) {
