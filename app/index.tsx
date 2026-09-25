@@ -326,7 +326,7 @@ function ScreenDashboard({ onNav }: { onNav: (i: number) => void }) {
   const leerGastosReales = () => {
     // 1. Aseguramos la tabla y leemos los datos
     db.execSync('CREATE TABLE IF NOT EXISTS gastos (id INTEGER PRIMARY KEY AUTOINCREMENT, monto TEXT, categoria TEXT, icono TEXT);');
-    const registros = db.getAllSync('SELECT * FROM gastos ORDER BY id DESC;');
+    const registros = db.getAllSync('SELECT * FROM gastos ORDER BY id DESC;') as any[];
     setListaGastos(registros);
 
     // 2. Sumamos todo manualmente usando un ciclo básico
@@ -482,42 +482,291 @@ function ScreenDashboard({ onNav }: { onNav: (i: number) => void }) {
   );
 }
 
-// ─── 3: Categorías ────────────────────────────────────────────────────────────
+// ─── 3: Categorías (DISEÑO FINAL Y CRUD) ──────────────────────────────────────
 function ScreenCategories({ onNav }: { onNav: (i: number) => void }) {
-  const cats = [
-    { name: "Alimentación", icon: "🍔", spent: 112000, limit: 160000, color: "#7E57C2" },
-    { name: "Transporte", icon: "🚗", spent: 74000, limit: 80000, color: "#F9A825" },
-    { name: "Compras", icon: "🛍️", spent: 158000, limit: 130000, color: "#C62828" },
-    { name: "Salud", icon: "❤️", spent: 32000, limit: 55000, color: "#2E7D32" },
-    { name: "Entretenimiento", icon: "🎬", spent: 26000, limit: 40000, color: "#3F51B5" },
-    { name: "Educación", icon: "📚", spent: 16000, limit: 28000, color: "#5C6BC0" },
-  ];
+  // Variables para la lista y estadísticas
+  const [listaCategorias, setListaCategorias] = useState<any[]>([]);
+  const [enAlerta, setEnAlerta] = useState(0);
+  const [sobrepasadas, setSobrepasadas] = useState(0);
+
+  // Variables para el formulario
+  const [mostrarFormulario, setMostrarFormulario] = useState(false);
+  const [idEditar, setIdEditar] = useState(0);
+  const [nombreNuevo, setNombreNuevo] = useState("");
+  const [iconoNuevo, setIconoNuevo] = useState("");
+  const [limiteNuevo, setLimiteNuevo] = useState("");
+
+  // (READ) Leer datos y calcular gastos con lógica simple
+  const cargarCategorias = () => {
+    db.execSync('CREATE TABLE IF NOT EXISTS categorias (id INTEGER PRIMARY KEY AUTOINCREMENT, nombre TEXT, icono TEXT, limite TEXT, color TEXT);');
+    
+    const categoriasDB = db.getAllSync('SELECT * FROM categorias ORDER BY id DESC;') as any[];
+    const gastosDB = db.getAllSync('SELECT * FROM gastos;') as any[];
+
+    let conteoAlerta = 0;
+    let conteoSobrepasado = 0;
+    let categoriasConTotales = [];
+
+    // Ciclo básico para calcular cuánto se gastó en cada categoría
+    for (let i = 0; i < categoriasDB.length; i++) {
+      let categoriaActual = categoriasDB[i];
+      let sumaGastos = 0;
+
+      for (let j = 0; j < gastosDB.length; j++) {
+        if (gastosDB[j].categoria === categoriaActual.nombre) {
+          let montoGasto = parseInt(gastosDB[j].monto);
+          if (!isNaN(montoGasto)) {
+            sumaGastos = sumaGastos + montoGasto;
+          }
+        }
+      }
+      
+      categoriaActual.gastado = sumaGastos;
+
+      // Calcular estados para los números de arriba
+      let limiteNum = parseInt(categoriaActual.limite);
+      if (isNaN(limiteNum)) limiteNum = 1;
+      
+      let porcentaje = Math.round((sumaGastos / limiteNum) * 100);
+
+      if (porcentaje > 100) {
+        conteoSobrepasado = conteoSobrepasado + 1;
+      } else if (porcentaje >= 80) {
+        conteoAlerta = conteoAlerta + 1;
+      }
+
+      categoriasConTotales.push(categoriaActual);
+    }
+
+    setListaCategorias(categoriasConTotales);
+    setEnAlerta(conteoAlerta);
+    setSobrepasadas(conteoSobrepasado);
+  };
+
+  useEffect(() => {
+    cargarCategorias();
+  }, []);
+
+  // (CREATE / UPDATE) Guardar o Editar
+  const guardarCategoria = () => {
+    let colorFijo = "#512DA8";
+
+    if (idEditar === 0) {
+      // Si el id es 0, significa que es una categoría nueva (CREATE)
+      db.runSync(
+        'INSERT INTO categorias (nombre, icono, limite, color) VALUES (?, ?, ?, ?);',
+        [nombreNuevo, iconoNuevo, limiteNuevo, colorFijo]
+      );
+    } else {
+      // Si tiene id, significa que estamos editando (UPDATE)
+      db.runSync(
+        'UPDATE categorias SET nombre = ?, icono = ?, limite = ? WHERE id = ?;',
+        [nombreNuevo, iconoNuevo, limiteNuevo, idEditar]
+      );
+    }
+    
+    // Limpiar formulario y ocultarlo
+    setNombreNuevo("");
+    setIconoNuevo("");
+    setLimiteNuevo("");
+    setIdEditar(0);
+    setMostrarFormulario(false);
+    
+    cargarCategorias();
+  };
+
+  // Preparar formulario para editar
+  const prepararEdicion = (categoria: any) => {
+    setNombreNuevo(categoria.nombre);
+    setIconoNuevo(categoria.icono);
+    setLimiteNuevo(categoria.limite);
+    setIdEditar(categoria.id);
+    setMostrarFormulario(true);
+  };
+
+  // (DELETE) Borrar categoría
+  const borrarCategoria = (idBorrar: number) => {
+    db.runSync('DELETE FROM categorias WHERE id = ?;', [idBorrar]);
+    cargarCategorias();
+  };
 
   return (
     <View style={{ flex: 1 }}>
       <ScrollView contentContainerStyle={{ padding: 20 }}>
-        <Text style={{ fontSize: 20, fontWeight: "700", marginBottom: 16 }}>Categorías</Text>
-        <View style={{ gap: 10 }}>
-          {cats.map((c) => {
-            const p = Math.round((c.spent / c.limit) * 100);
-            const barColor = p >= 100 ? "#C62828" : p >= 80 ? "#F9A825" : c.color;
-            return (
-              <View key={c.name} style={{ backgroundColor: "#fff", borderRadius: 16, padding: 14 }}>
-                <View style={{ flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 10 }}>
-                  <Text style={{ fontSize: 22 }}>{c.icon}</Text>
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ fontSize: 14, fontWeight: "600" }}>{c.name}</Text>
-                    <Text style={{ fontSize: 11, color: "#6B6580" }}>Límite: ${c.limit.toLocaleString("es-CL")}</Text>
-                  </View>
-                  <Text style={{ fontSize: 14, fontWeight: "700", color: barColor }}>
-                    ${c.spent.toLocaleString("es-CL")}
-                  </Text>
+        
+        {/* --- ENCABEZADO --- */}
+        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+          <Text style={{ fontSize: 24, fontWeight: "900", color: "#1E1B2E" }}>Categorías</Text>
+          <TouchableOpacity 
+            onPress={() => setMostrarFormulario(!mostrarFormulario)}
+            style={{ backgroundColor: "#512DA8", flexDirection: "row", alignItems: "center", paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8 }}
+          >
+            <Feather name={mostrarFormulario ? "minus" : "plus"} size={18} color="#fff" />
+            <Text style={{ color: "white", fontWeight: "bold", marginLeft: 4 }}>
+              {mostrarFormulario ? "Cerrar" : "Nueva"}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* --- FORMULARIO OCULTO (DISEÑO MEJORADO) --- */}
+        {mostrarFormulario ? (
+          <View style={{ backgroundColor: "#fff", padding: 20, borderRadius: 16, marginBottom: 20, elevation: 2 }}>
+            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+              <Text style={{ fontSize: 18, fontWeight: "800", color: "#1E1B2E" }}>
+                {idEditar === 0 ? "Nueva Categoría" : "Editar Categoría"}
+              </Text>
+              <TouchableOpacity onPress={() => { setMostrarFormulario(false); setIdEditar(0); }}>
+                <Feather name="x" size={20} color="#8A849C" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Campo: Nombre */}
+            <Text style={{ fontSize: 12, fontWeight: "700", color: "#6B6580", marginBottom: 6, marginLeft: 4 }}>
+              Nombre de la categoría
+            </Text>
+            <View style={{ flexDirection: "row", alignItems: "center", backgroundColor: "#F5F3FA", borderRadius: 12, paddingHorizontal: 14, height: 52, marginBottom: 16 }}>
+              <Feather name="tag" size={18} color="#8A849C" style={{ marginRight: 10 }} />
+              <TextInput 
+                placeholder="Ej. Mascotas" 
+                value={nombreNuevo} 
+                onChangeText={setNombreNuevo} 
+                style={{ flex: 1, fontSize: 15, color: "#1E1B2E" }} 
+              />
+            </View>
+
+            {/* Fila para Ícono y Límite */}
+            <View style={{ flexDirection: "row", gap: 12, marginBottom: 24 }}>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 12, fontWeight: "700", color: "#6B6580", marginBottom: 6, marginLeft: 4 }}>
+                  Ícono
+                </Text>
+                <View style={{ backgroundColor: "#F5F3FA", borderRadius: 12, height: 52, justifyContent: "center", alignItems: "center" }}>
+                  <TextInput 
+                    placeholder="🐶" 
+                    value={iconoNuevo} 
+                    onChangeText={setIconoNuevo} 
+                    maxLength={2}
+                    style={{ fontSize: 22, textAlign: "center", width: "100%" }} 
+                  />
                 </View>
-                <ProgressBar percent={p} color={barColor} />
+              </View>
+              
+              <View style={{ flex: 2.5 }}>
+                <Text style={{ fontSize: 12, fontWeight: "700", color: "#6B6580", marginBottom: 6, marginLeft: 4 }}>
+                  Límite mensual
+                </Text>
+                <View style={{ flexDirection: "row", alignItems: "center", backgroundColor: "#F5F3FA", borderRadius: 12, paddingHorizontal: 14, height: 52 }}>
+                  <Text style={{ color: "#8A849C", marginRight: 6, fontSize: 16, fontWeight: "bold" }}>$</Text>
+                  <TextInput 
+                    placeholder="50000" 
+                    value={limiteNuevo} 
+                    onChangeText={setLimiteNuevo} 
+                    keyboardType="numeric" 
+                    style={{ flex: 1, fontSize: 15, color: "#1E1B2E" }} 
+                  />
+                </View>
+              </View>
+            </View>
+
+            {/* Botón Guardar */}
+            <TouchableOpacity 
+              onPress={guardarCategoria} 
+              style={{ backgroundColor: "#512DA8", height: 52, borderRadius: 12, alignItems: "center", justifyContent: "center", flexDirection: "row" }}
+            >
+              <Feather name="save" size={18} color="#fff" style={{ marginRight: 8 }} />
+              <Text style={{ color: "white", fontWeight: "bold", fontSize: 15 }}>
+                {idEditar === 0 ? "Crear categoría" : "Guardar cambios"}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
+
+        {/* --- TARJETA DE ESTADÍSTICAS --- */}
+        <View style={{ flexDirection: "row", backgroundColor: "#fff", borderRadius: 16, padding: 20, justifyContent: "space-around", marginBottom: 20 }}>
+          <View style={{ alignItems: "center" }}>
+            <Text style={{ fontSize: 24, fontWeight: "900", color: "#512DA8" }}>{listaCategorias.length}</Text>
+            <Text style={{ fontSize: 11, color: "#8A849C" }}>Total categorías</Text>
+          </View>
+          <View style={{ width: 1, backgroundColor: "#E8E4F0", marginHorizontal: 10 }}></View>
+          <View style={{ alignItems: "center" }}>
+            <Text style={{ fontSize: 24, fontWeight: "900", color: "#F9A825" }}>{enAlerta}</Text>
+            <Text style={{ fontSize: 11, color: "#8A849C" }}>En alerta</Text>
+          </View>
+          <View style={{ width: 1, backgroundColor: "#E8E4F0", marginHorizontal: 10 }}></View>
+          <View style={{ alignItems: "center" }}>
+            <Text style={{ fontSize: 24, fontWeight: "900", color: "#C62828" }}>{sobrepasadas}</Text>
+            <Text style={{ fontSize: 11, color: "#8A849C" }}>Sobrepasadas</Text>
+          </View>
+        </View>
+
+        {/* --- LISTA DE CATEGORÍAS --- */}
+        <View style={{ gap: 16 }}>
+          {listaCategorias.map((c) => {
+            let limiteNum = parseInt(c.limite);
+            if (isNaN(limiteNum)) limiteNum = 1;
+            
+            let p = Math.round((c.gastado / limiteNum) * 100);
+            
+            // Configurar colores y textos según el porcentaje
+            let colorEstado = "#7E57C2"; // Morado (OK)
+            let fondoEstado = "rgba(126, 87, 194, 0.1)";
+            let textoEstado = "OK";
+            let colorBarraFondo = "#E8E4F0";
+
+            if (p > 100) {
+              colorEstado = "#C62828"; // Rojo
+              fondoEstado = "rgba(198, 40, 40, 0.1)";
+              textoEstado = "Sobrepasado";
+            } else if (p >= 80) {
+              colorEstado = "#F9A825"; // Amarillo/Naranja
+              fondoEstado = "rgba(249, 168, 37, 0.1)";
+              textoEstado = "En alerta";
+            } else if (c.gastado === 0) {
+              colorEstado = "#2E7D32"; // Verde
+              fondoEstado = "rgba(46, 125, 50, 0.1)";
+              textoEstado = "OK";
+            }
+
+            return (
+              <View key={c.id} style={{ backgroundColor: "#fff", borderRadius: 16, padding: 16, borderWidth: 1, borderColor: fondoEstado }}>
+                
+                <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+                    <View style={{ width: 48, height: 48, borderRadius: 12, backgroundColor: "#F5F3FA", alignItems: "center", justifyContent: "center" }}>
+                      <Text style={{ fontSize: 24 }}>{c.icono}</Text>
+                    </View>
+                    <View>
+                      <Text style={{ fontSize: 16, fontWeight: "bold", color: "#1E1B2E" }}>{c.nombre}</Text>
+                      <View style={{ backgroundColor: fondoEstado, alignSelf: "flex-start", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8, marginTop: 4 }}>
+                        <Text style={{ fontSize: 10, fontWeight: "bold", color: colorEstado }}>{textoEstado}</Text>
+                      </View>
+                    </View>
+                  </View>
+                  
+                  <View style={{ flexDirection: "row", gap: 12 }}>
+                    <TouchableOpacity onPress={() => prepararEdicion(c)}>
+                      <Feather name="edit-2" size={18} color="#8A849C" />
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => borrarCategoria(c.id)}>
+                      <Feather name="trash-2" size={18} color="#8A849C" />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
+                {/* Barra de progreso rediseñada */}
+                <View style={{ height: 8, backgroundColor: colorBarraFondo, borderRadius: 99, overflow: "hidden", marginBottom: 8 }}>
+                  <View style={{ width: `${Math.min(p, 100)}%`, backgroundColor: colorEstado, height: "100%", borderRadius: 99 }} />
+                </View>
+
+                <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+                  <Text style={{ fontSize: 12, color: "#8A849C" }}>${c.gastado.toLocaleString("es-CL")} gastado</Text>
+                  <Text style={{ fontSize: 12, fontWeight: "bold", color: colorEstado }}>{p}% · límite ${limiteNum.toLocaleString("es-CL")}</Text>
+                </View>
               </View>
             );
           })}
         </View>
+        
       </ScrollView>
       <BottomNav active={3} onNav={onNav} />
     </View>
