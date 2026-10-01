@@ -54,7 +54,7 @@ function MiniBadge({ percent, color }: { percent: number; color: string }) {
 function BottomNav({ active, onNav }: { active: number; onNav: (i: number) => void }) {
   const items = [
     { icon: "home", label: "Inicio", screen: 2 },
-    { icon: "grid", label: "Gastos", screen: 3 },
+    { icon: "grid", label: "Categorias", screen: 3 },
     { icon: "plus", label: "", screen: 4 },
     { icon: "target", label: "Metas", screen: 5 },
     { icon: "user", label: "Perfil", screen: 8 },
@@ -308,84 +308,114 @@ function ScreenSalarySetup({ onNext }: { onNext: () => void }) {
   );
 }
 
-// ─── 2: Dashboard (BARRAS DE PROGRESO Y DATOS REALES) ─────────────────────────
+// ─── 2: Dashboard (CATEGORÍAS DINÁMICAS Y CONEXIÓN A SQLITE) ──────────────────
 function ScreenDashboard({ onNav }: { onNav: (i: number) => void }) {
-  // Sueldo fijo para los cálculos
   const sueldoTotal = 850000;
 
-  // Variables simples para guardar las listas y los totales
   const [listaGastos, setListaGastos] = useState<any[]>([]);
   const [totalGastado, setTotalGastado] = useState(0);
-  
-  // Variables individuales para cada categoría (Estructura para principiantes)
-  const [gastoComida, setGastoComida] = useState(0);
-  const [gastoTransporte, setGastoTransporte] = useState(0);
-  const [gastoCompras, setGastoCompras] = useState(0);
-  const [gastoSalud, setGastoSalud] = useState(0);
+  const [categoriasDinamicas, setCategoriasDinamicas] = useState<any[]>([]);
 
-  const leerGastosReales = () => {
-    // 1. Aseguramos la tabla y leemos los datos
+  // Estados para la edición del monto del gasto
+  const [idEditar, setIdEditar] = useState<number | null>(null);
+  const [montoEditar, setMontoEditar] = useState("");
+
+  const leerDatosReales = () => {
+    // 1. Aseguramos que existan las tablas
+    db.execSync('CREATE TABLE IF NOT EXISTS categorias (id INTEGER PRIMARY KEY AUTOINCREMENT, nombre TEXT, icono TEXT, limite TEXT, color TEXT);');
     db.execSync('CREATE TABLE IF NOT EXISTS gastos (id INTEGER PRIMARY KEY AUTOINCREMENT, monto TEXT, categoria TEXT, icono TEXT);');
-    const registros = db.getAllSync('SELECT * FROM gastos ORDER BY id DESC;') as any[];
-    setListaGastos(registros);
 
-    // 2. Sumamos todo manualmente usando un ciclo básico
-    let sumaTotal = 0;
-    let sumaComida = 0;
-    let sumaTransporte = 0;
-    let sumaCompras = 0;
-    let sumaSalud = 0;
-
-    for (let i = 0; i < registros.length; i++) {
-      // Convertimos el texto a número
-      let montoNumero = parseInt(registros[i].monto);
-      
-      // Si el monto no es válido, lo dejamos en 0 para no romper la suma
-      if (isNaN(montoNumero)) {
-        montoNumero = 0;
-      }
-      
-      // Sumamos al gran total
-      sumaTotal = sumaTotal + montoNumero;
-
-      // Sumamos a la categoría correspondiente
-      if (registros[i].categoria === "Comida" || registros[i].categoria === "Alimentación") {
-        sumaComida = sumaComida + montoNumero;
-      }
-      if (registros[i].categoria === "Transporte") {
-        sumaTransporte = sumaTransporte + montoNumero;
-      }
-      if (registros[i].categoria === "Compras") {
-        sumaCompras = sumaCompras + montoNumero;
-      }
-      if (registros[i].categoria === "Salud") {
-        sumaSalud = sumaSalud + montoNumero;
-      }
+    // 2. Si la tabla de categorías está vacía, creamos las categorías por defecto
+    const categoriasExistentes = db.getAllSync('SELECT * FROM categorias;') as any[];
+    if (categoriasExistentes.length === 0) {
+      db.runSync('INSERT INTO categorias (nombre, icono, limite, color) VALUES (?, ?, ?, ?);', ["Alimentación", "🍔", "160000", "#7E57C2"]);
+      db.runSync('INSERT INTO categorias (nombre, icono, limite, color) VALUES (?, ?, ?, ?);', ["Transporte", "🚗", "80000", "#F9A825"]);
+      db.runSync('INSERT INTO categorias (nombre, icono, limite, color) VALUES (?, ?, ?, ?);', ["Compras", "🛍️", "130000", "#C62828"]);
+      db.runSync('INSERT INTO categorias (nombre, icono, limite, color) VALUES (?, ?, ?, ?);', ["Salud", "❤️", "55000", "#2E7D32"]);
     }
 
-    // 3. Guardamos los resultados en las variables de estado
+    // 3. Leemos las categorías y los gastos reales de SQLite
+    const categoriasDB = db.getAllSync('SELECT * FROM categorias ORDER BY id ASC;') as any[];
+    const registrosGastos = db.getAllSync('SELECT * FROM gastos ORDER BY id DESC;') as any[];
+    setListaGastos(registrosGastos);
+
+    // 4. Sumamos el total gastado general
+    let sumaTotal = 0;
+    for (let i = 0; i < registrosGastos.length; i++) {
+      let montoNum = parseInt(registrosGastos[i].monto);
+      if (!isNaN(montoNum)) {
+        sumaTotal += montoNum;
+      }
+    }
     setTotalGastado(sumaTotal);
-    setGastoComida(sumaComida);
-    setGastoTransporte(sumaTransporte);
-    setGastoCompras(sumaCompras);
-    setGastoSalud(sumaSalud);
+
+    // 5. Calculamos el gasto por cada categoría leída de la base de datos
+    const categoriasProcesadas = categoriasDB.map((cat) => {
+      let sumaCat = 0;
+      for (let j = 0; j < registrosGastos.length; j++) {
+        if (
+          registrosGastos[j].categoria === cat.nombre ||
+          (cat.nombre === "Alimentación" && registrosGastos[j].categoria === "Comida")
+        ) {
+          let montoNum = parseInt(registrosGastos[j].monto);
+          if (!isNaN(montoNum)) {
+            sumaCat += montoNum;
+          }
+        }
+      }
+
+      let limiteNum = parseInt(cat.limite);
+      if (isNaN(limiteNum) || limiteNum <= 0) limiteNum = 1;
+
+      return {
+        id: cat.id,
+        name: cat.nombre,
+        spent: sumaCat,
+        limit: limiteNum,
+        color: cat.color || "#512DA8",
+        icono: cat.icono || "🏷️"
+      };
+    });
+
+    setCategoriasDinamicas(categoriasProcesadas);
   };
 
   useEffect(() => {
-    leerGastosReales();
+    leerDatosReales();
   }, []);
+
+  // --- ELIMINAR GASTO ---
+  const borrarGasto = (idBorrar: number) => {
+    db.runSync('DELETE FROM gastos WHERE id = ?;', [idBorrar]);
+    if (idEditar === idBorrar) {
+      setIdEditar(null);
+    }
+    leerDatosReales();
+  };
+
+  // --- PREPARAR EDICIÓN DE GASTO ---
+  const prepararEdicion = (gasto: any) => {
+    setIdEditar(gasto.id);
+    setMontoEditar(gasto.monto.toString());
+  };
+
+  // --- GUARDAR EDICIÓN DE GASTO ---
+  const guardarEdicionGasto = () => {
+    if (idEditar === null) return;
+
+    db.runSync(
+      'UPDATE gastos SET monto = ? WHERE id = ?;',
+      [montoEditar, idEditar]
+    );
+
+    setIdEditar(null);
+    setMontoEditar("");
+    leerDatosReales();
+  };
 
   // Cálculos para la tarjeta principal
   let porcentajeTotal = Math.round((totalGastado / sueldoTotal) * 100);
   let saldoDisponible = sueldoTotal - totalGastado;
-
-  // Arreglo para dibujar las barras de colores que vimos en el diseño
-  const categorias = [
-    { name: "Alimentación", spent: gastoComida, limit: 160000, color: "#7E57C2" },
-    { name: "Transporte", spent: gastoTransporte, limit: 80000, color: "#F9A825" },
-    { name: "Compras", spent: gastoCompras, limit: 130000, color: "#C62828" },
-    { name: "Salud", spent: gastoSalud, limit: 55000, color: "#2E7D32" },
-  ];
 
   return (
     <View style={{ flex: 1 }}>
@@ -406,21 +436,21 @@ function ScreenDashboard({ onNav }: { onNav: (i: number) => void }) {
         </View>
 
         <LinearGradient
-          colors={["#512DA8", "#3F51B5"]}
+          colors={["#512DA8", "#512DA8"]}
           style={{ borderRadius: 20, padding: 20, marginBottom: 20 }}
         >
           <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
             <View>
-              <Text style={{ color: "rgba(255,255,255,0.7)", fontSize: 11 }}>Sueldo · CLP</Text>
-              <Text style={{ color: "#fff", fontSize: 24, fontWeight: "700" }}>${sueldoTotal.toLocaleString("es-CL")}</Text>
+              <Text style={{ color: "rgba(255,255,255,0.7)", fontSize: 11 }}>Disponible · CLP</Text>
+              <Text style={{ color: "#A5F3AE", fontSize: 24, fontWeight: "700" }}>${saldoDisponible.toLocaleString("es-CL")}</Text>
               <View style={{ flexDirection: "row", gap: 14, marginTop: 12 }}>
                 <View>
                   <Text style={{ color: "rgba(255,255,255,0.6)", fontSize: 10 }}>Gastado</Text>
                   <Text style={{ color: "#fff", fontSize: 14, fontWeight: "600" }}>${totalGastado.toLocaleString("es-CL")}</Text>
                 </View>
                 <View>
-                  <Text style={{ color: "rgba(255,255,255,0.6)", fontSize: 10 }}>Disponible</Text>
-                  <Text style={{ color: "#A5F3AE", fontSize: 14, fontWeight: "600" }}>${saldoDisponible.toLocaleString("es-CL")}</Text>
+                  <Text style={{ color: "rgba(255,255,255,0.6)", fontSize: 10 }}>Sueldo</Text>
+                  <Text style={{ color: "#fff", fontSize: 14, fontWeight: "600" }}>${sueldoTotal.toLocaleString("es-CL")}</Text>
                 </View>
               </View>
             </View>
@@ -428,7 +458,7 @@ function ScreenDashboard({ onNav }: { onNav: (i: number) => void }) {
           </View>
         </LinearGradient>
 
-        {/* --- SECCIÓN 1: BARRAS DE PROGRESO DE CATEGORÍAS --- */}
+        {/* --- SECCIÓN 1: BARRAS DE PROGRESO DE CATEGORÍAS (DINÁMICAS) --- */}
         <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 12 }}>
           <Text style={{ fontSize: 15, fontWeight: "700" }}>Categorías</Text>
           <TouchableOpacity onPress={() => onNav(3)}>
@@ -437,13 +467,16 @@ function ScreenDashboard({ onNav }: { onNav: (i: number) => void }) {
         </View>
 
         <View style={{ gap: 10, marginBottom: 20 }}>
-          {categorias.map((c) => {
+          {categoriasDinamicas.map((c) => {
             const p = Math.round((c.spent / c.limit) * 100);
             const colorBarra = p >= 100 ? "#C62828" : p >= 80 ? "#F9A825" : c.color;
             return (
-              <View key={c.name} style={{ backgroundColor: "#fff", borderRadius: 14, padding: 14 }}>
+              <View key={c.id || c.name} style={{ backgroundColor: "#fff", borderRadius: 14, padding: 14 }}>
                 <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 8 }}>
-                  <Text style={{ fontWeight: "600", fontSize: 14 }}>{c.name}</Text>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                    <Text style={{ fontSize: 16 }}>{c.icono}</Text>
+                    <Text style={{ fontWeight: "600", fontSize: 14 }}>{c.name}</Text>
+                  </View>
                   <Text style={{ fontWeight: "700", color: colorBarra }}>${c.spent.toLocaleString("es-CL")}</Text>
                 </View>
                 <ProgressBar percent={p} color={colorBarra} />
@@ -452,9 +485,36 @@ function ScreenDashboard({ onNav }: { onNav: (i: number) => void }) {
           })}
         </View>
 
-        {/* --- SECCIÓN 2: HISTORIAL DE GASTOS --- */}
+        {/* --- FORMULARIO DE EDICIÓN DE MONTO --- */}
+        {idEditar !== null && (
+          <View style={{ backgroundColor: "#fff", borderRadius: 14, padding: 16, marginBottom: 20, borderWidth: 1, borderColor: "#512DA8" }}>
+            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <Text style={{ fontSize: 16, fontWeight: "700", color: "#1E1B2E" }}>Editar Monto del Gasto</Text>
+              <TouchableOpacity onPress={() => setIdEditar(null)}>
+                <Feather name="x" size={20} color="#8A849C" />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={{ fontSize: 12, fontWeight: "600", color: "#6B6580", marginBottom: 4 }}>Nuevo Monto ($)</Text>
+            <TextInput
+              value={montoEditar}
+              onChangeText={setMontoEditar}
+              keyboardType="numeric"
+              style={{ backgroundColor: "#F5F3FA", borderRadius: 10, paddingHorizontal: 12, height: 44, marginBottom: 16, fontSize: 15, color: "#1E1B2E" }}
+            />
+
+            <TouchableOpacity
+              onPress={guardarEdicionGasto}
+              style={{ backgroundColor: "#512DA8", height: 44, borderRadius: 10, alignItems: "center", justifyContent: "center" }}
+            >
+              <Text style={{ color: "#fff", fontWeight: "600", fontSize: 14 }}>Guardar Cambios</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* --- SECCIÓN 2: HISTORIAL Y GESTIÓN DE GASTOS --- */}
         <View style={{ backgroundColor: "#fff", borderRadius: 14, padding: 14 }}>
-          <Text style={{ fontSize: 16, fontWeight: "700", marginBottom: 15 }}>Historial de Gastos</Text>
+          <Text style={{ fontSize: 16, fontWeight: "700", marginBottom: 15 }}>Gestión de Gastos</Text>
           
           {listaGastos.length === 0 ? (
             <Text style={{ color: "#6B6580", textAlign: "center", marginVertical: 10 }}>
@@ -468,71 +528,89 @@ function ScreenDashboard({ onNav }: { onNav: (i: number) => void }) {
                   <Text style={{ fontWeight: 'bold', color: "#1E1B2E", fontSize: 16 }}>{gasto.categoria}</Text>
                   <Text style={{ color: "#6B6580", fontSize: 12 }}>ID: {gasto.id}</Text>
                 </View>
-                <Text style={{ fontSize: 16, fontWeight: "700", color: "#C62828" }}>
+                
+                <Text style={{ fontSize: 16, fontWeight: "700", color: "#C62828", marginRight: 12 }}>
                   ${gasto.monto}
                 </Text>
+
+                <View style={{ flexDirection: 'row', gap: 10 }}>
+                  <TouchableOpacity onPress={() => prepararEdicion(gasto)} style={{ padding: 4 }}>
+                    <Feather name="edit-2" size={18} color="#512DA8" />
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => borrarGasto(gasto.id)} style={{ padding: 4 }}>
+                    <Feather name="trash-2" size={18} color="#C62828" />
+                  </TouchableOpacity>
+                </View>
               </View>
             ))
           )}
         </View>
-        
+
       </ScrollView>
       <BottomNav active={2} onNav={onNav} />
     </View>
   );
 }
 
-// ─── 3: Categorías (DISEÑO FINAL Y CRUD) ──────────────────────────────────────
+// ─── 3: Categorías (CONEXIÓN Y POBLADO AUTOMÁTICO) ───────────────────────────
 function ScreenCategories({ onNav }: { onNav: (i: number) => void }) {
-  // Variables para la lista y estadísticas
   const [listaCategorias, setListaCategorias] = useState<any[]>([]);
   const [enAlerta, setEnAlerta] = useState(0);
   const [sobrepasadas, setSobrepasadas] = useState(0);
 
-  // Variables para el formulario
   const [mostrarFormulario, setMostrarFormulario] = useState(false);
   const [idEditar, setIdEditar] = useState(0);
   const [nombreNuevo, setNombreNuevo] = useState("");
   const [iconoNuevo, setIconoNuevo] = useState("");
   const [limiteNuevo, setLimiteNuevo] = useState("");
 
-  // (READ) Leer datos y calcular gastos con lógica simple
   const cargarCategorias = () => {
     db.execSync('CREATE TABLE IF NOT EXISTS categorias (id INTEGER PRIMARY KEY AUTOINCREMENT, nombre TEXT, icono TEXT, limite TEXT, color TEXT);');
-    
-    const categoriasDB = db.getAllSync('SELECT * FROM categorias ORDER BY id DESC;') as any[];
+    db.execSync('CREATE TABLE IF NOT EXISTS gastos (id INTEGER PRIMARY KEY AUTOINCREMENT, monto TEXT, categoria TEXT, icono TEXT);');
+
+    // Comprobar si hay categorías iniciales; si no, poblarlas
+    let categoriasDB = db.getAllSync('SELECT * FROM categorias ORDER BY id ASC;') as any[];
+    if (categoriasDB.length === 0) {
+      db.runSync('INSERT INTO categorias (nombre, icono, limite, color) VALUES (?, ?, ?, ?);', ["Alimentación", "🍔", "160000", "#7E57C2"]);
+      db.runSync('INSERT INTO categorias (nombre, icono, limite, color) VALUES (?, ?, ?, ?);', ["Transporte", "🚗", "80000", "#F9A825"]);
+      db.runSync('INSERT INTO categorias (nombre, icono, limite, color) VALUES (?, ?, ?, ?);', ["Compras", "🛍️", "130000", "#C62828"]);
+      db.runSync('INSERT INTO categorias (nombre, icono, limite, color) VALUES (?, ?, ?, ?);', ["Salud", "❤️", "55000", "#2E7D32"]);
+      categoriasDB = db.getAllSync('SELECT * FROM categorias ORDER BY id ASC;') as any[];
+    }
+
     const gastosDB = db.getAllSync('SELECT * FROM gastos;') as any[];
 
     let conteoAlerta = 0;
     let conteoSobrepasado = 0;
     let categoriasConTotales = [];
 
-    // Ciclo básico para calcular cuánto se gastó en cada categoría
     for (let i = 0; i < categoriasDB.length; i++) {
-      let categoriaActual = categoriasDB[i];
+      let categoriaActual = { ...categoriasDB[i] };
       let sumaGastos = 0;
 
       for (let j = 0; j < gastosDB.length; j++) {
-        if (gastosDB[j].categoria === categoriaActual.nombre) {
+        if (
+          gastosDB[j].categoria === categoriaActual.nombre ||
+          (categoriaActual.nombre === "Alimentación" && gastosDB[j].categoria === "Comida")
+        ) {
           let montoGasto = parseInt(gastosDB[j].monto);
           if (!isNaN(montoGasto)) {
-            sumaGastos = sumaGastos + montoGasto;
+            sumaGastos += montoGasto;
           }
         }
       }
       
       categoriaActual.gastado = sumaGastos;
 
-      // Calcular estados para los números de arriba
       let limiteNum = parseInt(categoriaActual.limite);
-      if (isNaN(limiteNum)) limiteNum = 1;
+      if (isNaN(limiteNum) || limiteNum <= 0) limiteNum = 1;
       
       let porcentaje = Math.round((sumaGastos / limiteNum) * 100);
 
       if (porcentaje > 100) {
-        conteoSobrepasado = conteoSobrepasado + 1;
+        conteoSobrepasado += 1;
       } else if (porcentaje >= 80) {
-        conteoAlerta = conteoAlerta + 1;
+        conteoAlerta += 1;
       }
 
       categoriasConTotales.push(categoriaActual);
@@ -547,25 +625,21 @@ function ScreenCategories({ onNav }: { onNav: (i: number) => void }) {
     cargarCategorias();
   }, []);
 
-  // (CREATE / UPDATE) Guardar o Editar
   const guardarCategoria = () => {
     let colorFijo = "#512DA8";
 
     if (idEditar === 0) {
-      // Si el id es 0, significa que es una categoría nueva (CREATE)
       db.runSync(
         'INSERT INTO categorias (nombre, icono, limite, color) VALUES (?, ?, ?, ?);',
-        [nombreNuevo, iconoNuevo, limiteNuevo, colorFijo]
+        [nombreNuevo, iconoNuevo || "🏷️", limiteNuevo || "100000", colorFijo]
       );
     } else {
-      // Si tiene id, significa que estamos editando (UPDATE)
       db.runSync(
         'UPDATE categorias SET nombre = ?, icono = ?, limite = ? WHERE id = ?;',
-        [nombreNuevo, iconoNuevo, limiteNuevo, idEditar]
+        [nombreNuevo, iconoNuevo || "🏷️", limiteNuevo || "100000", idEditar]
       );
     }
     
-    // Limpiar formulario y ocultarlo
     setNombreNuevo("");
     setIconoNuevo("");
     setLimiteNuevo("");
@@ -575,7 +649,6 @@ function ScreenCategories({ onNav }: { onNav: (i: number) => void }) {
     cargarCategorias();
   };
 
-  // Preparar formulario para editar
   const prepararEdicion = (categoria: any) => {
     setNombreNuevo(categoria.nombre);
     setIconoNuevo(categoria.icono);
@@ -584,7 +657,6 @@ function ScreenCategories({ onNav }: { onNav: (i: number) => void }) {
     setMostrarFormulario(true);
   };
 
-  // (DELETE) Borrar categoría
   const borrarCategoria = (idBorrar: number) => {
     db.runSync('DELETE FROM categorias WHERE id = ?;', [idBorrar]);
     cargarCategorias();
@@ -608,7 +680,7 @@ function ScreenCategories({ onNav }: { onNav: (i: number) => void }) {
           </TouchableOpacity>
         </View>
 
-        {/* --- FORMULARIO OCULTO (DISEÑO MEJORADO) --- */}
+        {/* --- FORMULARIO DE CATEGORÍA --- */}
         {mostrarFormulario ? (
           <View style={{ backgroundColor: "#fff", padding: 20, borderRadius: 16, marginBottom: 20, elevation: 2 }}>
             <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
@@ -620,7 +692,6 @@ function ScreenCategories({ onNav }: { onNav: (i: number) => void }) {
               </TouchableOpacity>
             </View>
 
-            {/* Campo: Nombre */}
             <Text style={{ fontSize: 12, fontWeight: "700", color: "#6B6580", marginBottom: 6, marginLeft: 4 }}>
               Nombre de la categoría
             </Text>
@@ -634,7 +705,6 @@ function ScreenCategories({ onNav }: { onNav: (i: number) => void }) {
               />
             </View>
 
-            {/* Fila para Ícono y Límite */}
             <View style={{ flexDirection: "row", gap: 12, marginBottom: 24 }}>
               <View style={{ flex: 1 }}>
                 <Text style={{ fontSize: 12, fontWeight: "700", color: "#6B6580", marginBottom: 6, marginLeft: 4 }}>
@@ -668,7 +738,6 @@ function ScreenCategories({ onNav }: { onNav: (i: number) => void }) {
               </View>
             </View>
 
-            {/* Botón Guardar */}
             <TouchableOpacity 
               onPress={guardarCategoria} 
               style={{ backgroundColor: "#512DA8", height: 52, borderRadius: 12, alignItems: "center", justifyContent: "center", flexDirection: "row" }}
@@ -703,33 +772,31 @@ function ScreenCategories({ onNav }: { onNav: (i: number) => void }) {
         <View style={{ gap: 16 }}>
           {listaCategorias.map((c) => {
             let limiteNum = parseInt(c.limite);
-            if (isNaN(limiteNum)) limiteNum = 1;
+            if (isNaN(limiteNum) || limiteNum <= 0) limiteNum = 1;
             
             let p = Math.round((c.gastado / limiteNum) * 100);
             
-            // Configurar colores y textos según el porcentaje
-            let colorEstado = "#7E57C2"; // Morado (OK)
+            let colorEstado = "#7E57C2";
             let fondoEstado = "rgba(126, 87, 194, 0.1)";
             let textoEstado = "OK";
             let colorBarraFondo = "#E8E4F0";
 
             if (p > 100) {
-              colorEstado = "#C62828"; // Rojo
+              colorEstado = "#C62828";
               fondoEstado = "rgba(198, 40, 40, 0.1)";
               textoEstado = "Sobrepasado";
             } else if (p >= 80) {
-              colorEstado = "#F9A825"; // Amarillo/Naranja
+              colorEstado = "#F9A825";
               fondoEstado = "rgba(249, 168, 37, 0.1)";
               textoEstado = "En alerta";
             } else if (c.gastado === 0) {
-              colorEstado = "#2E7D32"; // Verde
+              colorEstado = "#2E7D32";
               fondoEstado = "rgba(46, 125, 50, 0.1)";
               textoEstado = "OK";
             }
 
             return (
               <View key={c.id} style={{ backgroundColor: "#fff", borderRadius: 16, padding: 16, borderWidth: 1, borderColor: fondoEstado }}>
-                
                 <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
                     <View style={{ width: 48, height: 48, borderRadius: 12, backgroundColor: "#F5F3FA", alignItems: "center", justifyContent: "center" }}>
@@ -753,7 +820,6 @@ function ScreenCategories({ onNav }: { onNav: (i: number) => void }) {
                   </View>
                 </View>
 
-                {/* Barra de progreso rediseñada */}
                 <View style={{ height: 8, backgroundColor: colorBarraFondo, borderRadius: 99, overflow: "hidden", marginBottom: 8 }}>
                   <View style={{ width: `${Math.min(p, 100)}%`, backgroundColor: colorEstado, height: "100%", borderRadius: 99 }} />
                 </View>
@@ -772,6 +838,8 @@ function ScreenCategories({ onNav }: { onNav: (i: number) => void }) {
     </View>
   );
 }
+
+
 
 // ─── 4: Registrar Gasto Rápido ────────────────────────────────────────────────
 function ScreenQuickExpense({ onNav }: { onNav: (i: number) => void }) {
