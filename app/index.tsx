@@ -3,6 +3,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import * as SQLite from 'expo-sqlite';
 import React, { useEffect, useState } from "react";
 import {
+  Animated,
   SafeAreaView,
   ScrollView,
   StatusBar,
@@ -309,6 +310,7 @@ function ScreenSalarySetup({ onNext }: { onNext: () => void }) {
 }
 
 // ─── 2: Dashboard (CATEGORÍAS DINÁMICAS Y CONEXIÓN A SQLITE) ──────────────────
+// ─── 2: Dashboard (CON BARRA FINZEN ANIMADA) ──────────────────────────────────
 function ScreenDashboard({ onNav }: { onNav: (i: number) => void }) {
   const sueldoTotal = 850000;
 
@@ -316,16 +318,34 @@ function ScreenDashboard({ onNav }: { onNav: (i: number) => void }) {
   const [totalGastado, setTotalGastado] = useState(0);
   const [categoriasDinamicas, setCategoriasDinamicas] = useState<any[]>([]);
 
-  // Estados para la edición del monto del gasto
   const [idEditar, setIdEditar] = useState<number | null>(null);
   const [montoEditar, setMontoEditar] = useState("");
 
+  // ─── CONTROL DE ANIMACIÓN DE SCROLL ───
+  const scrollY = React.useRef(new Animated.Value(0)).current;
+
+  const headerHeight = scrollY.interpolate({
+    inputRange: [0, 80],
+    outputRange: [56, 36], // Se reduce de 50px a 0px
+    extrapolate: "clamp",
+  });
+
+  const headerOpacity = scrollY.interpolate({
+    inputRange: [0, 50],
+    outputRange: [1, 0.95],    
+    extrapolate: "clamp",
+  });
+
+  const textScale = scrollY.interpolate({
+    inputRange: [0, 80],
+    outputRange: [1, 0.75], // Se encoge ligeramente el texto
+    extrapolate: "clamp",
+  });
+
   const leerDatosReales = () => {
-    // 1. Aseguramos que existan las tablas
     db.execSync('CREATE TABLE IF NOT EXISTS categorias (id INTEGER PRIMARY KEY AUTOINCREMENT, nombre TEXT, icono TEXT, limite TEXT, color TEXT);');
     db.execSync('CREATE TABLE IF NOT EXISTS gastos (id INTEGER PRIMARY KEY AUTOINCREMENT, monto TEXT, categoria TEXT, icono TEXT);');
 
-    // 2. Si la tabla de categorías está vacía, creamos las categorías por defecto
     const categoriasExistentes = db.getAllSync('SELECT * FROM categorias;') as any[];
     if (categoriasExistentes.length === 0) {
       db.runSync('INSERT INTO categorias (nombre, icono, limite, color) VALUES (?, ?, ?, ?);', ["Alimentación", "🍔", "160000", "#7E57C2"]);
@@ -334,12 +354,10 @@ function ScreenDashboard({ onNav }: { onNav: (i: number) => void }) {
       db.runSync('INSERT INTO categorias (nombre, icono, limite, color) VALUES (?, ?, ?, ?);', ["Salud", "❤️", "55000", "#2E7D32"]);
     }
 
-    // 3. Leemos las categorías y los gastos reales de SQLite
     const categoriasDB = db.getAllSync('SELECT * FROM categorias ORDER BY id ASC;') as any[];
     const registrosGastos = db.getAllSync('SELECT * FROM gastos ORDER BY id DESC;') as any[];
     setListaGastos(registrosGastos);
 
-    // 4. Sumamos el total gastado general
     let sumaTotal = 0;
     for (let i = 0; i < registrosGastos.length; i++) {
       let montoNum = parseInt(registrosGastos[i].monto);
@@ -349,7 +367,6 @@ function ScreenDashboard({ onNav }: { onNav: (i: number) => void }) {
     }
     setTotalGastado(sumaTotal);
 
-    // 5. Calculamos el gasto por cada categoría leída de la base de datos
     const categoriasProcesadas = categoriasDB.map((cat) => {
       let sumaCat = 0;
       for (let j = 0; j < registrosGastos.length; j++) {
@@ -384,7 +401,6 @@ function ScreenDashboard({ onNav }: { onNav: (i: number) => void }) {
     leerDatosReales();
   }, []);
 
-  // --- ELIMINAR GASTO ---
   const borrarGasto = (idBorrar: number) => {
     db.runSync('DELETE FROM gastos WHERE id = ?;', [idBorrar]);
     if (idEditar === idBorrar) {
@@ -393,35 +409,58 @@ function ScreenDashboard({ onNav }: { onNav: (i: number) => void }) {
     leerDatosReales();
   };
 
-  // --- PREPARAR EDICIÓN DE GASTO ---
   const prepararEdicion = (gasto: any) => {
     setIdEditar(gasto.id);
     setMontoEditar(gasto.monto.toString());
   };
 
-  // --- GUARDAR EDICIÓN DE GASTO ---
   const guardarEdicionGasto = () => {
     if (idEditar === null) return;
-
-    db.runSync(
-      'UPDATE gastos SET monto = ? WHERE id = ?;',
-      [montoEditar, idEditar]
-    );
-
+    db.runSync('UPDATE gastos SET monto = ? WHERE id = ?;', [montoEditar, idEditar]);
     setIdEditar(null);
     setMontoEditar("");
     leerDatosReales();
   };
 
-  // Cálculos para la tarjeta principal
   let porcentajeTotal = Math.round((totalGastado / sueldoTotal) * 100);
   let saldoDisponible = sueldoTotal - totalGastado;
 
   return (
     <View style={{ flex: 1 }}>
-      <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 20 }}>
-        
-        {/* --- CABECERA Y TARJETA MORADA --- */}
+      
+      {/* ─── BARRA MORADA ANIMADA "FINZEN" (SE REDUCE Y DESAPARECE AL SCROLEAR) ─── */}
+      <Animated.View
+        style={{
+          height: headerHeight,
+          opacity: headerOpacity,
+          backgroundColor: "#512DA8",
+          justifyContent: "center",
+          alignItems: "center",
+          overflow: "hidden",
+        }}
+      >
+        <Animated.Text
+          style={{
+            color: "#fff",
+            fontSize: 18,
+            fontWeight: "bold",
+            transform: [{ scale: textScale }],
+          }}
+        >
+          Finzen
+        </Animated.Text>
+      </Animated.View>
+
+      {/* ─── SCROLL CON CAPTURA DE EVENTO ON-SCROLL ─── */}
+      <Animated.ScrollView
+        contentContainerStyle={{ padding: 20, paddingBottom: 20 }}
+        scrollEventThrottle={16}
+        onScroll={Animated.event(
+          [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+          { useNativeDriver: false }
+        )}
+      >
+        {/* CABECERA Y TARJETA MORADA */}
         <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
           <View>
             <Text style={{ fontSize: 13, color: "#6B6580" }}>Buenos días,</Text>
@@ -458,7 +497,7 @@ function ScreenDashboard({ onNav }: { onNav: (i: number) => void }) {
           </View>
         </LinearGradient>
 
-        {/* --- SECCIÓN 1: BARRAS DE PROGRESO DE CATEGORÍAS (DINÁMICAS) --- */}
+        {/* SECCIÓN 1: CATEGORÍAS */}
         <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 12 }}>
           <Text style={{ fontSize: 15, fontWeight: "700" }}>Categorías</Text>
           <TouchableOpacity onPress={() => onNav(3)}>
@@ -485,7 +524,7 @@ function ScreenDashboard({ onNav }: { onNav: (i: number) => void }) {
           })}
         </View>
 
-        {/* --- FORMULARIO DE EDICIÓN DE MONTO --- */}
+        {/* EDICIÓN DE GASTO */}
         {idEditar !== null && (
           <View style={{ backgroundColor: "#fff", borderRadius: 14, padding: 16, marginBottom: 20, borderWidth: 1, borderColor: "#512DA8" }}>
             <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
@@ -494,7 +533,6 @@ function ScreenDashboard({ onNav }: { onNav: (i: number) => void }) {
                 <Feather name="x" size={20} color="#8A849C" />
               </TouchableOpacity>
             </View>
-
             <Text style={{ fontSize: 12, fontWeight: "600", color: "#6B6580", marginBottom: 4 }}>Nuevo Monto ($)</Text>
             <TextInput
               value={montoEditar}
@@ -502,7 +540,6 @@ function ScreenDashboard({ onNav }: { onNav: (i: number) => void }) {
               keyboardType="numeric"
               style={{ backgroundColor: "#F5F3FA", borderRadius: 10, paddingHorizontal: 12, height: 44, marginBottom: 16, fontSize: 15, color: "#1E1B2E" }}
             />
-
             <TouchableOpacity
               onPress={guardarEdicionGasto}
               style={{ backgroundColor: "#512DA8", height: 44, borderRadius: 10, alignItems: "center", justifyContent: "center" }}
@@ -512,10 +549,9 @@ function ScreenDashboard({ onNav }: { onNav: (i: number) => void }) {
           </View>
         )}
 
-        {/* --- SECCIÓN 2: HISTORIAL Y GESTIÓN DE GASTOS --- */}
+        {/* GESTIÓN DE GASTOS */}
         <View style={{ backgroundColor: "#fff", borderRadius: 14, padding: 14 }}>
           <Text style={{ fontSize: 16, fontWeight: "700", marginBottom: 15 }}>Gestión de Gastos</Text>
-          
           {listaGastos.length === 0 ? (
             <Text style={{ color: "#6B6580", textAlign: "center", marginVertical: 10 }}>
               Aún no hay gastos registrados.
@@ -528,11 +564,9 @@ function ScreenDashboard({ onNav }: { onNav: (i: number) => void }) {
                   <Text style={{ fontWeight: 'bold', color: "#1E1B2E", fontSize: 16 }}>{gasto.categoria}</Text>
                   <Text style={{ color: "#6B6580", fontSize: 12 }}>ID: {gasto.id}</Text>
                 </View>
-                
                 <Text style={{ fontSize: 16, fontWeight: "700", color: "#C62828", marginRight: 12 }}>
                   ${gasto.monto}
                 </Text>
-
                 <View style={{ flexDirection: 'row', gap: 10 }}>
                   <TouchableOpacity onPress={() => prepararEdicion(gasto)} style={{ padding: 4 }}>
                     <Feather name="edit-2" size={18} color="#512DA8" />
@@ -546,7 +580,7 @@ function ScreenDashboard({ onNav }: { onNav: (i: number) => void }) {
           )}
         </View>
 
-      </ScrollView>
+      </Animated.ScrollView>
       <BottomNav active={2} onNav={onNav} />
     </View>
   );
