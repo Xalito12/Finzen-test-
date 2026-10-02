@@ -844,17 +844,22 @@ function ScreenCategories({ onNav }: { onNav: (i: number) => void }) {
 // ─── 4: Registrar Gasto Rápido ────────────────────────────────────────────────
 function ScreenQuickExpense({ onNav }: { onNav: (i: number) => void }) {
   const [amount, setAmount] = useState("0");
+  const [cats, setCats] = useState<any[]>([]);
   const [selected, setSelected] = useState(0);
-  
-  const cats = [
-    { name: "Comida", icon: "🍔" },
-    { name: "Transporte", icon: "🚗" },
-    { name: "Compras", icon: "🛍️" },
-    { name: "Salud", icon: "❤️" },
-    { name: "Ocio", icon: "🎬" },
-    { name: "Otro", icon: "➕" },
-  ];
-  
+
+  // 1. Cargar las categorías existentes desde la base de datos
+  useEffect(() => {
+    try {
+      db.execSync(
+        'CREATE TABLE IF NOT EXISTS categorias (id INTEGER PRIMARY KEY AUTOINCREMENT, nombre TEXT, icono TEXT, limite TEXT, color TEXT);'
+      );
+      const categoriasDB = db.getAllSync('SELECT * FROM categorias ORDER BY id ASC;') as any[];
+      setCats(categoriasDB);
+    } catch (e) {
+      console.error("Error al cargar categorías:", e);
+    }
+  }, []);
+
   const keys = ["1", "2", "3", "4", "5", "6", "7", "8", "9", ".", "0", "⌫"];
 
   const handleKey = (k: string) => {
@@ -864,25 +869,29 @@ function ScreenQuickExpense({ onNav }: { onNav: (i: number) => void }) {
     else setAmount((a) => a + k);
   };
 
-  // --- NUEVA FUNCIÓN PARA GUARDAR EN LA BASE DE DATOS ---
+  // 2. Guardar usando la categoría dinámica seleccionada
   const guardarGastoReal = () => {
-    // 1. Creamos una tabla nueva específica para los gastos si no existe
+    const montoNumerico = parseFloat(amount);
+    if (isNaN(montoNumerico) || montoNumerico <= 0) {
+      return; // Evita registrar gastos vacíos o en cero
+    }
+
+    if (cats.length === 0) {
+      return;
+    }
+
     db.execSync(
       'CREATE TABLE IF NOT EXISTS gastos (id INTEGER PRIMARY KEY AUTOINCREMENT, monto TEXT, categoria TEXT, icono TEXT);'
     );
 
-    // 2. Extraemos los valores exactos que el usuario eligió en la pantalla
-    let montoIngresado = amount;
-    let categoriaElegida = cats[selected].name;
-    let iconoElegido = cats[selected].icon;
+    const categoriaElegida = cats[selected]?.nombre || "General";
+    const iconoElegido = cats[selected]?.icono || "🏷️";
 
-    // 3. Insertamos el gasto real en la tabla
     db.runSync(
       'INSERT INTO gastos (monto, categoria, icono) VALUES (?, ?, ?);',
-      [montoIngresado, categoriaElegida, iconoElegido]
+      [amount, categoriaElegida, iconoElegido]
     );
 
-    // 4. Regresamos a la pantalla del Dashboard (pantalla número 2)
     onNav(2);
   };
 
@@ -901,34 +910,42 @@ function ScreenQuickExpense({ onNav }: { onNav: (i: number) => void }) {
           <Text style={{ fontSize: 42, fontWeight: "700", color: "#1E1B2E" }}>${amount}</Text>
         </View>
 
+        {/* Lista dinámica de categorías de la base de datos */}
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 20 }}>
-          {cats.map((c, i) => (
-            <TouchableOpacity
-              key={c.name}
-              onPress={() => setSelected(i)}
-              style={{
-                width: "31%",
-                paddingVertical: 12,
-                borderRadius: 12,
-                borderWidth: 1,
-                borderColor: selected === i ? "#512DA8" : "#E8E4F0",
-                backgroundColor: selected === i ? "#512DA8" : "#fff",
-                alignItems: "center",
-              }}
-            >
-              <Text style={{ fontSize: 20 }}>{c.icon}</Text>
-              <Text
+          {cats.length === 0 ? (
+            <Text style={{ color: "#6B6580", fontSize: 13, textAlign: "center", width: "100%", marginVertical: 10 }}>
+              No hay categorías disponibles. Crea una primero en la sección Categorías.
+            </Text>
+          ) : (
+            cats.map((c, i) => (
+              <TouchableOpacity
+                key={c.id || c.nombre}
+                onPress={() => setSelected(i)}
                 style={{
-                  fontSize: 11,
-                  color: selected === i ? "#fff" : "#1E1B2E",
-                  fontWeight: "500",
-                  marginTop: 4,
+                  width: "31%",
+                  paddingVertical: 12,
+                  borderRadius: 12,
+                  borderWidth: 1,
+                  borderColor: selected === i ? "#512DA8" : "#E8E4F0",
+                  backgroundColor: selected === i ? "#512DA8" : "#fff",
+                  alignItems: "center",
                 }}
               >
-                {c.name}
-              </Text>
-            </TouchableOpacity>
-          ))}
+                <Text style={{ fontSize: 20 }}>{c.icono}</Text>
+                <Text
+                  numberOfLines={1}
+                  style={{
+                    fontSize: 11,
+                    color: selected === i ? "#fff" : "#1E1B2E",
+                    fontWeight: "500",
+                    marginTop: 4,
+                  }}
+                >
+                  {c.nombre}
+                </Text>
+              </TouchableOpacity>
+            ))
+          )}
         </View>
 
         {/* Teclado numérico */}
@@ -953,13 +970,13 @@ function ScreenQuickExpense({ onNav }: { onNav: (i: number) => void }) {
           ))}
         </View>
 
-        {/* BOTÓN ACTUALIZADO PARA LLAMAR A LA BASE DE DATOS */}
         <TouchableOpacity
           onPress={guardarGastoReal}
+          disabled={cats.length === 0 || amount === "0"}
           style={{
             height: 50,
             borderRadius: 14,
-            backgroundColor: "#512DA8",
+            backgroundColor: (cats.length === 0 || amount === "0") ? "#B39DDB" : "#512DA8",
             alignItems: "center",
             justifyContent: "center",
           }}
