@@ -1,9 +1,11 @@
+// Clase TypeScript que modela la estructura de datos de un 'Elemento'
 export class Elemento {
   id: string;
   titulo: string;
   detalle: string;
   imagenUrl: string;
 
+  // Constructor que inicializa las propiedades garantizando tipado estricto
   constructor(id: string, titulo: string, detalle: string, imagenUrl: string) {
     this.id = id;
     this.titulo = titulo;
@@ -12,7 +14,9 @@ export class Elemento {
   }
 }
 
+// Exportación de datos de prueba (Mock Data) fuertemente tipados
 export const listaElementosInicial: Elemento[] = [
+  new Elemento("1", "Sobre nosotros", "...", "https://..."),
   new Elemento(
     "1",
     "Sobre nosotros",

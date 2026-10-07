@@ -1,9 +1,11 @@
-import React from "react";
-import { View, Text, Image, ScrollView, SafeAreaView, TouchableOpacity } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import React from "react";
+import { Image, SafeAreaView, ScrollView, Text, TouchableOpacity, View } from "react-native";
 
 export default function Detalle() {
-  const router = useRouter();
+  const router = useRouter(); // Hook para controlar la pila de navegación
+  
+  // Hook de Expo Router que captura los parámetros enviados mediante la URL/Ruta
   const params = useLocalSearchParams<{
     id: string;
     titulo: string;
@@ -14,6 +16,7 @@ export default function Detalle() {
   return (
     <SafeAreaView className="flex-1 bg-white">
       <ScrollView className="flex-1">
+        {/* Renderiza la imagen según la URL recibida en los parámetros */}
         <Image
           source={{ uri: params.imagenUrl }}
           className="h-64 w-full bg-slate-200"
@@ -21,7 +24,6 @@ export default function Detalle() {
         />
 
         <View className="p-6">
-          {/* Etiqueta / Acento con Morado Vibrante (#7E57C2) */}
           <Text className="text-xs font-bold uppercase tracking-wider text-[#7E57C2]">
             Elemento #{params.id}
           </Text>
@@ -35,7 +37,7 @@ export default function Detalle() {
             {params.detalle}
           </Text>
 
-          {/* Botón Volver con estilo Secundario / Indigo (#3F51B5) */}
+          {/* Botón que ejecuta la acción de volver a la vista anterior */}
           <TouchableOpacity
             onPress={() => router.back()}
             className="mt-8 items-center rounded-lg border border-[#3F51B5] bg-indigo-50 py-3 active:bg-indigo-100"

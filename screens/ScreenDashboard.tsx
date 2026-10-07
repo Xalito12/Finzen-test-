@@ -15,8 +15,11 @@ export default function ScreenDashboard({ onNav }: { onNav: (i: number) => void 
   const [idEditar, setIdEditar] = useState<number | null>(null);
   const [montoEditar, setMontoEditar] = useState("");
 
+
+  // Crea una referencia mutable que persiste durante renderizados para el scroll
   const scrollY = React.useRef(new Animated.Value(0)).current;
 
+  // Interpolación: Convierte el desplazamiento en Y (0px a 80px) a una altura (56px a 36px)
   const headerHeight = scrollY.interpolate({
     inputRange: [0, 80],
     outputRange: [56, 36],
@@ -42,6 +45,7 @@ export default function ScreenDashboard({ onNav }: { onNav: (i: number) => void 
       return;
     }
 
+    // Crea la estructura de tablas en la BD si no existen al iniciar la app
     db.execSync('CREATE TABLE IF NOT EXISTS categorias (id INTEGER PRIMARY KEY AUTOINCREMENT, nombre TEXT, icono TEXT, limite TEXT, color TEXT);');
     db.execSync('CREATE TABLE IF NOT EXISTS gastos (id INTEGER PRIMARY KEY AUTOINCREMENT, monto TEXT, categoria TEXT, icono TEXT);');
 
@@ -53,6 +57,8 @@ export default function ScreenDashboard({ onNav }: { onNav: (i: number) => void 
       db.runSync('INSERT INTO categorias (nombre, icono, limite, color) VALUES (?, ?, ?, ?);', ["Salud", "❤️", "55000", "#2E7D32"]);
     }
 
+
+    // Consultas de selección para obtener registros
     const categoriasDB = db.getAllSync('SELECT * FROM categorias ORDER BY id ASC;') as any[];
     const registrosGastos = db.getAllSync('SELECT * FROM gastos ORDER BY id DESC;') as any[];
     setListaGastos(registrosGastos);

@@ -10,10 +10,13 @@ import ScreenQuickExpense from "../screens/ScreenQuickExpense";
 import ScreenRecurring from "../screens/ScreenRecurring";
 import ScreenSalarySetup from "../screens/ScreenSalarySetup";
 import ScreenSavingsGoals from "../screens/ScreenSavingsGoals";
+// Importación modular de subpantallas...
 
 export default function App() {
-  const [screen, setScreen] = useState(2); // Inicia en el Dashboard
+  // Estado numérico que actúa como máquina de estados para la navegación
+  const [screen, setScreen] = useState(2); // Inicia por defecto en ScreenDashboard (2)
 
+  // Condicional de renderizado según el valor del estado 'screen'
   const renderScreen = () => {
     switch (screen) {
       case 0:
@@ -42,7 +45,7 @@ export default function App() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: "#F5F3FA" }}>
       <StatusBar barStyle="dark-content" />
-      {renderScreen()}
+      {renderScreen()} {/* Monta la pantalla seleccionada dinámicamente */}
     </SafeAreaView>
   );
 }
