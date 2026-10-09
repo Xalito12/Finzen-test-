@@ -64,6 +64,8 @@ export default function ScreenDashboard({ onNav }: { onNav: (i: number) => void 
     setListaGastos(registrosGastos);
 
     let sumaTotal = 0;
+    // Procesamiento de datos en memoria: Cruza la tabla de categorías con la de gastos para
+    // calcular sumatorias locales sin usar consultas SQL relacionales
     for (let i = 0; i < registrosGastos.length; i++) {
       let montoNum = parseInt(registrosGastos[i].monto);
       if (!isNaN(montoNum)) sumaTotal += montoNum;
@@ -72,6 +74,8 @@ export default function ScreenDashboard({ onNav }: { onNav: (i: number) => void 
 
     const categoriasProcesadas = categoriasDB.map((cat) => {
       let sumaCat = 0;
+    // Cruza la tabla de categorías con la de gastos para
+    // calcular sumatorias locales sin usar consultas SQL relacionales
       for (let j = 0; j < registrosGastos.length; j++) {
         if (
           registrosGastos[j].categoria === cat.nombre ||
@@ -121,7 +125,8 @@ export default function ScreenDashboard({ onNav }: { onNav: (i: number) => void 
     setMontoEditar("");
     leerDatosReales();
   };
-
+// Cálculo de métricas: Se redondea el porcentaje de gasto sobre el límite para evitar
+// decimales infinitos en la renderización gráfica.
   let porcentajeTotal = Math.round((totalGastado / sueldoTotal) * 100);
   let saldoDisponible = sueldoTotal - totalGastado;
 
@@ -197,6 +202,7 @@ export default function ScreenDashboard({ onNav }: { onNav: (i: number) => void 
         <View style={{ gap: 10, marginBottom: 20 }}>
           {categoriasDinamicas.map((c) => {
             const p = Math.round((c.spent / c.limit) * 100);
+            // Reasigna el color de las barras gráficas en tiempo real basándose en los umbrales de alerta (80% y 100%).
             const colorBarra = p >= 100 ? "#C62828" : p >= 80 ? "#F9A825" : c.color;
             return (
               <View key={c.id || c.name} style={{ backgroundColor: "#fff", borderRadius: 14, padding: 14 }}>
@@ -212,7 +218,8 @@ export default function ScreenDashboard({ onNav }: { onNav: (i: number) => void 
             );
           })}
         </View>
-
+      {/* El operador lógico AND (&&) evitacargar el formulario en el Virtual DOM a menos que el usuario
+      seleccione un gasto específico para editar. */}
         {idEditar !== null && (
           <View style={{ backgroundColor: "#fff", borderRadius: 14, padding: 16, marginBottom: 20, borderWidth: 1, borderColor: "#512DA8" }}>
             <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>

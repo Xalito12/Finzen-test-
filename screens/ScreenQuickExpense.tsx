@@ -22,6 +22,8 @@ export default function ScreenQuickExpense({ onNav }: { onNav: (i: number) => vo
 
   const keys = ["1", "2", "3", "4", "5", "6", "7", "8", "9", ".", "0", "⌫"];
 
+  // Previene errores tipográficos verificando
+  // la existencia de puntos decimales múltiples e intercepta la acción de borrado nativa.
   const handleKey = (k: string) => {
     if (k === "⌫") setAmount((a) => (a.length > 1 ? a.slice(0, -1) : "0"));
     else if (k === "." && amount.includes(".")) return;
@@ -108,6 +110,8 @@ export default function ScreenQuickExpense({ onNav }: { onNav: (i: number) => vo
 
         <TouchableOpacity
           onPress={guardarGastoReal}
+          //  Bloquea la interacción si no hay categorías creadas o el monto es cero,
+          // manteniendo la integridad de la BD.
           disabled={cats.length === 0 || amount === "0"}
           style={{
             height: 50,

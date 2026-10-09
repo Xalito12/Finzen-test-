@@ -24,7 +24,11 @@ export default function ScreenCategories({ onNav }: { onNav: (i: number) => void
     db.execSync('CREATE TABLE IF NOT EXISTS categorias (id INTEGER PRIMARY KEY AUTOINCREMENT, nombre TEXT, icono TEXT, limite TEXT, color TEXT);');
     db.execSync('CREATE TABLE IF NOT EXISTS gastos (id INTEGER PRIMARY KEY AUTOINCREMENT, monto TEXT, categoria TEXT, icono TEXT);');
 
+// Se usa 'as any[]' para omitir la validación estricta, ya que SQLite devuelve tipos 'unknown' por defecto.
     let categoriasDB = db.getAllSync('SELECT * FROM categorias ORDER BY id ASC;') as any[];
+
+    // Valida si la tabla está vacía para poblarla con registros 
+    // iniciales por defecto, mejorando la UX del primer uso.
     if (categoriasDB.length === 0) {
       db.runSync('INSERT INTO categorias (nombre, icono, limite, color) VALUES (?, ?, ?, ?);', ["Alimentación", "🍔", "160000", "#7E57C2"]);
       db.runSync('INSERT INTO categorias (nombre, icono, limite, color) VALUES (?, ?, ?, ?);', ["Transporte", "🚗", "80000", "#F9A825"]);
@@ -32,7 +36,7 @@ export default function ScreenCategories({ onNav }: { onNav: (i: number) => void
       db.runSync('INSERT INTO categorias (nombre, icono, limite, color) VALUES (?, ?, ?, ?);', ["Salud", "❤️", "55000", "#2E7D32"]);
       categoriasDB = db.getAllSync('SELECT * FROM categorias ORDER BY id ASC;') as any[];
     }
-
+// Se usa 'as any[]' para omitir la validación estricta, ya que SQLite devuelve tipos 'unknown' por defecto.
     const gastosDB = db.getAllSync('SELECT * FROM gastos;') as any[];
 
     let conteoAlerta = 0;
@@ -71,6 +75,7 @@ export default function ScreenCategories({ onNav }: { onNav: (i: number) => void
     setSobrepasadas(conteoSobrepasado);
   };
 
+// El arreglo vacío [] indica que cargarCategorias() se ejecutará una sola vez al montar la vista.
   useEffect(() => {
     cargarCategorias();
   }, []);
@@ -78,7 +83,8 @@ export default function ScreenCategories({ onNav }: { onNav: (i: number) => void
   const guardarCategoria = () => {
     if (!db) return;
     let colorFijo = "#512DA8";
-
+// Si idEditar es 0, ejecuta un INSERT (Create).
+// Si contiene un ID numérico, ejecuta un UPDATE (Update).
     if (idEditar === 0) {
       db.runSync('INSERT INTO categorias (nombre, icono, limite, color) VALUES (?, ?, ?, ?);', [nombreNuevo, iconoNuevo || "🏷️", limiteNuevo || "100000", colorFijo]);
     } else {
@@ -123,6 +129,7 @@ export default function ScreenCategories({ onNav }: { onNav: (i: number) => void
           </TouchableOpacity>
         </View>
 
+        {/* Renderizado Condicional de React: El operador lógico AND (&&) evita */}
         {mostrarFormulario && (
           <View style={{ backgroundColor: "#fff", padding: 20, borderRadius: 16, marginBottom: 20, elevation: 2 }}>
             <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
@@ -193,6 +200,7 @@ export default function ScreenCategories({ onNav }: { onNav: (i: number) => void
             if (isNaN(limiteNum) || limiteNum <= 0) limiteNum = 1;
             let p = Math.round((c.gastado / limiteNum) * 100);
             
+            //  Reasigna las variables de diseño gráfico en tiempo real basándose en los umbrales de alerta (80% y 100%).
             let colorEstado = "#7E57C2";
             let fondoEstado = "rgba(126, 87, 194, 0.1)";
             let textoEstado = "OK";
