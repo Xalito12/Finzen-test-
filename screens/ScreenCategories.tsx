@@ -3,6 +3,7 @@ import React, { useEffect, useState } from "react";
 import { ScrollView, Text, TextInput, TouchableOpacity, View } from "react-native";
 import BottomNav from "../components/BottomNav";
 import { db } from "../database/db";
+import { respaldarEnLaNube } from '../database/syncService';
 
 export default function ScreenCategories({ onNav }: { onNav: (i: number) => void }) {
   const [listaCategorias, setListaCategorias] = useState<any[]>([]);
@@ -35,6 +36,7 @@ export default function ScreenCategories({ onNav }: { onNav: (i: number) => void
       db.runSync('INSERT INTO categorias (nombre, icono, limite, color) VALUES (?, ?, ?, ?);', ["Compras", "🛍️", "130000", "#C62828"]);
       db.runSync('INSERT INTO categorias (nombre, icono, limite, color) VALUES (?, ?, ?, ?);', ["Salud", "❤️", "55000", "#2E7D32"]);
       categoriasDB = db.getAllSync('SELECT * FROM categorias ORDER BY id ASC;') as any[];
+      respaldarEnLaNube()
     }
 // Se usa 'as any[]' para omitir la validación estricta, ya que SQLite devuelve tipos 'unknown' por defecto.
     const gastosDB = db.getAllSync('SELECT * FROM gastos;') as any[];
@@ -97,6 +99,7 @@ export default function ScreenCategories({ onNav }: { onNav: (i: number) => void
     setIdEditar(0);
     setMostrarFormulario(false);
     cargarCategorias();
+    respaldarEnLaNube(); // Llama a la función de respaldo en la nube después de guardar cambios
   };
 
   const prepararEdicion = (categoria: any) => {
@@ -105,12 +108,14 @@ export default function ScreenCategories({ onNav }: { onNav: (i: number) => void
     setLimiteNuevo(categoria.limite);
     setIdEditar(categoria.id);
     setMostrarFormulario(true);
+    respaldarEnLaNube()
   };
 
   const borrarCategoria = (idBorrar: number) => {
     if (!db) return;
     db.runSync('DELETE FROM categorias WHERE id = ?;', [idBorrar]);
     cargarCategorias();
+    respaldarEnLaNube()
   };
 
   return (

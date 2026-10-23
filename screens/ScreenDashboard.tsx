@@ -6,6 +6,7 @@ import BottomNav from "../components/BottomNav";
 import MiniBadge from "../components/MiniBadge";
 import ProgressBar from "../components/ProgressBar";
 import { db } from "../database/db";
+import { respaldarEnLaNube } from '../database/syncService';
 
 export default function ScreenDashboard({ onNav }: { onNav: (i: number) => void }) {
   const sueldoTotal = 850000;
@@ -111,6 +112,7 @@ export default function ScreenDashboard({ onNav }: { onNav: (i: number) => void 
     db.runSync('DELETE FROM gastos WHERE id = ?;', [idBorrar]);
     if (idEditar === idBorrar) setIdEditar(null);
     leerDatosReales();
+    respaldarEnLaNube();
   };
 
   const prepararEdicion = (gasto: any) => {
@@ -124,6 +126,7 @@ export default function ScreenDashboard({ onNav }: { onNav: (i: number) => void 
     setIdEditar(null);
     setMontoEditar("");
     leerDatosReales();
+    respaldarEnLaNube();
   };
 // Cálculo de métricas: Se redondea el porcentaje de gasto sobre el límite para evitar
 // decimales infinitos en la renderización gráfica.

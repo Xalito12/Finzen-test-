@@ -3,6 +3,7 @@ import React, { useEffect, useState } from "react";
 import { ScrollView, Text, TouchableOpacity, View } from "react-native";
 import BottomNav from "../components/BottomNav";
 import { db } from "../database/db";
+import { respaldarEnLaNube } from '../database/syncService';
 
 export default function ScreenQuickExpense({ onNav }: { onNav: (i: number) => void }) {
   const [amount, setAmount] = useState("0");
@@ -40,6 +41,7 @@ export default function ScreenQuickExpense({ onNav }: { onNav: (i: number) => vo
     const iconoElegido = cats[selected]?.icono || "🏷️";
 
     db.runSync('INSERT INTO gastos (monto, categoria, icono) VALUES (?, ?, ?);', [amount, categoriaElegida, iconoElegido]);
+    respaldarEnLaNube();
     onNav(2);
   };
 
