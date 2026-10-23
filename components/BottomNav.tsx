@@ -23,7 +23,7 @@ export default function BottomNav({ active, onNav }: { active: number; onNav: (i
         justifyContent: "space-around",
         paddingBottom: 6,
       }}
-    >
+    > 
       {items.map((item, i) => {
         if (i === 2) {
           return (

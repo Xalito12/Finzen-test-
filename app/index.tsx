@@ -1,5 +1,6 @@
-import React, { useState } from "react";
-import { SafeAreaView, StatusBar } from "react-native";
+import React, { useEffect, useState } from "react";
+import { ActivityIndicator, SafeAreaView, StatusBar, View } from "react-native";
+import { supabase } from "../database/supabase"; // Importa tu cliente de Supabase
 
 import ScreenCategories from "../screens/ScreenCategories";
 import ScreenDashboard from "../screens/ScreenDashboard";
@@ -8,19 +9,46 @@ import ScreenOnboarding from "../screens/ScreenOnboarding";
 import ScreenProfile from "../screens/ScreenProfile";
 import ScreenQuickExpense from "../screens/ScreenQuickExpense";
 import ScreenRecurring from "../screens/ScreenRecurring";
+import ScreenRegister from "../screens/ScreenRegister";
 import ScreenSalarySetup from "../screens/ScreenSalarySetup";
 import ScreenSavingsGoals from "../screens/ScreenSavingsGoals";
-// Importación modular de subpantallas...
 
 export default function App() {
-  // Estado numérico que actúa como máquina de estados para la navegación
-  const [screen, setScreen] = useState(2); // Inicia por defecto en ScreenDashboard (2)
+  const [screen, setScreen] = useState<number | null>(null); // Inicia en null mientras revisa la sesión
 
-  // Condicional de renderizado según el valor del estado 'screen'
+  useEffect(() => {
+    // 1. Revisa si hay un usuario logueado en la sesión guardada
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        setScreen(2); // Usuario autenticado -> va al Dashboard
+      } else {
+        setScreen(9); // Sin cuenta o deslogueado -> va al Registro
+      }
+    });
+
+    // 2. Escucha cambios de sesión en tiempo real (login, logout, etc.)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) {
+        setScreen(2);
+      } else {
+        setScreen(9);
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
+
   const renderScreen = () => {
     switch (screen) {
       case 0:
-        return <ScreenOnboarding onNext={() => setScreen(1)} />;
+  return (
+    <ScreenOnboarding
+      onRegister={() => setScreen(9)} // Lleva al formulario de registro
+      onNext={() => setScreen(1)}     // Lleva a configurar sueldo
+    />
+  );
       case 1:
         return <ScreenSalarySetup onNext={() => setScreen(2)} />;
       case 2:
@@ -37,15 +65,26 @@ export default function App() {
         return <ScreenRecurring onNav={setScreen} />;
       case 8:
         return <ScreenProfile onNav={setScreen} />;
+      case 9:
+        return <ScreenRegister onNav={setScreen} />;
       default:
         return <ScreenDashboard onNav={setScreen} />;
     }
   };
 
+  // Muestra un loader rápido mientras Supabase comprueba el almacenamiento local
+  if (screen === null) {
+    return (
+      <View style={{ flex: 1, backgroundColor: "#F5F3FA", justifyContent: "center", alignItems: "center" }}>
+        <ActivityIndicator size="large" color="#512DA8" />
+      </View>
+    );
+  }
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: "#F5F3FA" }}>
       <StatusBar barStyle="dark-content" />
-      {renderScreen()} {/* Monta la pantalla seleccionada dinámicamente */}
+      {renderScreen()}
     </SafeAreaView>
   );
 }
