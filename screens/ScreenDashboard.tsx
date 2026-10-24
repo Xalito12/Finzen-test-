@@ -1,26 +1,29 @@
+// screens/ScreenDashboard.tsx
 import { Feather } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import React, { useEffect, useState } from "react";
-import { Animated, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { Alert, Animated, Text, TextInput, TouchableOpacity, View } from "react-native";
 import BottomNav from "../components/BottomNav";
 import MiniBadge from "../components/MiniBadge";
 import ProgressBar from "../components/ProgressBar";
 import { db } from "../database/db";
-import { respaldarEnLaNube } from '../database/syncService';
+import { supabase } from "../database/supabase";
+import { respaldarEnLaNube } from "../database/syncService";
 
 export default function ScreenDashboard({ onNav }: { onNav: (i: number) => void }) {
-  const sueldoTotal = 850000;
+  const [nombreUsuario, setNombreUsuario] = useState("Usuario");
+  const [sueldoTotal, setSueldoTotal] = useState(0);
+  const [editandoSueldo, setEditandoSueldo] = useState(false);
+  const [nuevoSueldoInput, setNuevoSueldoInput] = useState("");
+
   const [listaGastos, setListaGastos] = useState<any[]>([]);
   const [totalGastado, setTotalGastado] = useState(0);
   const [categoriasDinamicas, setCategoriasDinamicas] = useState<any[]>([]);
   const [idEditar, setIdEditar] = useState<number | null>(null);
   const [montoEditar, setMontoEditar] = useState("");
 
-
-  // Crea una referencia mutable que persiste durante renderizados para el scroll
   const scrollY = React.useRef(new Animated.Value(0)).current;
 
-  // Interpolación: Convierte el desplazamiento en Y (0px a 80px) a una altura (56px a 36px)
   const headerHeight = scrollY.interpolate({
     inputRange: [0, 80],
     outputRange: [56, 36],
@@ -39,6 +42,33 @@ export default function ScreenDashboard({ onNav }: { onNav: (i: number) => void 
     extrapolate: "clamp",
   });
 
+  // 1. Obtener nombre y sueldo del usuario autenticado desde Supabase
+  const cargarUsuarioAuth = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data: perfil, error } = await supabase
+        .from("perfiles")
+        .select("nombre, sueldo")
+        .eq("id", user.id)
+        .single();
+
+      if (perfil) {
+        setNombreUsuario(perfil.nombre || user.email?.split("@")[0] || "Usuario");
+        if (perfil.sueldo) {
+          setSueldoTotal(Number(perfil.sueldo));
+        }
+      } else {
+        const nombreFallback = user.user_metadata?.nombre || user.email?.split("@")[0] || "Usuario";
+        setNombreUsuario(nombreFallback);
+      }
+    } catch (err: any) {
+      console.error("Error al cargar perfil desde Supabase:", err.message);
+    }
+  };
+
+  // 2. Leer gastos y categorías de SQLite
   const leerDatosReales = () => {
     if (!db) {
       setListaGastos([]);
@@ -46,7 +76,6 @@ export default function ScreenDashboard({ onNav }: { onNav: (i: number) => void 
       return;
     }
 
-    // Crea la estructura de tablas en la BD si no existen al iniciar la app
     db.execSync('CREATE TABLE IF NOT EXISTS categorias (id INTEGER PRIMARY KEY AUTOINCREMENT, nombre TEXT, icono TEXT, limite TEXT, color TEXT);');
     db.execSync('CREATE TABLE IF NOT EXISTS gastos (id INTEGER PRIMARY KEY AUTOINCREMENT, monto TEXT, categoria TEXT, icono TEXT);');
 
@@ -58,15 +87,11 @@ export default function ScreenDashboard({ onNav }: { onNav: (i: number) => void 
       db.runSync('INSERT INTO categorias (nombre, icono, limite, color) VALUES (?, ?, ?, ?);', ["Salud", "❤️", "55000", "#2E7D32"]);
     }
 
-
-    // Consultas de selección para obtener registros
     const categoriasDB = db.getAllSync('SELECT * FROM categorias ORDER BY id ASC;') as any[];
     const registrosGastos = db.getAllSync('SELECT * FROM gastos ORDER BY id DESC;') as any[];
     setListaGastos(registrosGastos);
 
     let sumaTotal = 0;
-    // Procesamiento de datos en memoria: Cruza la tabla de categorías con la de gastos para
-    // calcular sumatorias locales sin usar consultas SQL relacionales
     for (let i = 0; i < registrosGastos.length; i++) {
       let montoNum = parseInt(registrosGastos[i].monto);
       if (!isNaN(montoNum)) sumaTotal += montoNum;
@@ -75,8 +100,6 @@ export default function ScreenDashboard({ onNav }: { onNav: (i: number) => void 
 
     const categoriasProcesadas = categoriasDB.map((cat) => {
       let sumaCat = 0;
-    // Cruza la tabla de categorías con la de gastos para
-    // calcular sumatorias locales sin usar consultas SQL relacionales
       for (let j = 0; j < registrosGastos.length; j++) {
         if (
           registrosGastos[j].categoria === cat.nombre ||
@@ -104,8 +127,43 @@ export default function ScreenDashboard({ onNav }: { onNav: (i: number) => void 
   };
 
   useEffect(() => {
+    cargarUsuarioAuth();
     leerDatosReales();
   }, []);
+
+  // 3. Guardar el nuevo sueldo editado directamente en Supabase
+  const guardarNuevoSueldo = async () => {
+    const valorLimpio = parseInt(nuevoSueldoInput.replace(/[^0-9]/g, ""));
+    if (isNaN(valorLimpio) || valorLimpio <= 0) {
+      Alert.alert("Atención", "Ingresa un monto de sueldo válido.");
+      return;
+    }
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        Alert.alert("Error", "No hay sesión activa.");
+        return;
+      }
+
+      const { error } = await supabase
+        .from("perfiles")
+        .update({ sueldo: valorLimpio })
+        .eq("id", user.id);
+
+      if (error) {
+        Alert.alert("Error al actualizar", error.message);
+        return;
+      }
+
+      setSueldoTotal(valorLimpio);
+      setEditandoSueldo(false);
+      setNuevoSueldoInput("");
+      Alert.alert("Éxito", "Sueldo actualizado correctamente.");
+    } catch (err: any) {
+      Alert.alert("Error inesperado", err.message || "No se pudo actualizar.");
+    }
+  };
 
   const borrarGasto = (idBorrar: number) => {
     if (!db) return;
@@ -128,13 +186,12 @@ export default function ScreenDashboard({ onNav }: { onNav: (i: number) => void 
     leerDatosReales();
     respaldarEnLaNube();
   };
-// Cálculo de métricas: Se redondea el porcentaje de gasto sobre el límite para evitar
-// decimales infinitos en la renderización gráfica.
-  let porcentajeTotal = Math.round((totalGastado / sueldoTotal) * 100);
-  let saldoDisponible = sueldoTotal - totalGastado;
+
+  const porcentajeTotal = sueldoTotal > 0 ? Math.round((totalGastado / sueldoTotal) * 100) : 0;
+  const saldoDisponible = sueldoTotal - totalGastado;
 
   return (
-    <View style={{ flex: 1 }}>
+    <View style={{ flex: 1, backgroundColor: "#F5F3FA" }}>
       <Animated.View
         style={{
           height: headerHeight,
@@ -153,19 +210,20 @@ export default function ScreenDashboard({ onNav }: { onNav: (i: number) => void 
             transform: [{ scale: textScale }],
           }}
         >
-          Finzen
+          FinZen
         </Animated.Text>
       </Animated.View>
 
       <Animated.ScrollView
-        contentContainerStyle={{ padding: 20, paddingBottom: 20 }}
+        contentContainerStyle={{ padding: 20, paddingBottom: 100 }}
         scrollEventThrottle={16}
         onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: false })}
       >
+        {/* Saludo personalizado */}
         <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
           <View>
             <Text style={{ fontSize: 13, color: "#6B6580" }}>Buenos días,</Text>
-            <Text style={{ fontSize: 20, fontWeight: "700", color: "#1E1B2E" }}>Andrés 👋</Text>
+            <Text style={{ fontSize: 20, fontWeight: "700", color: "#1E1B2E" }}>{nombreUsuario} 👋</Text>
           </View>
           <TouchableOpacity
             onPress={() => onNav(6)}
@@ -175,19 +233,34 @@ export default function ScreenDashboard({ onNav }: { onNav: (i: number) => void 
           </TouchableOpacity>
         </View>
 
+        {/* Tarjeta de Saldo y Sueldo */}
         <LinearGradient colors={["#512DA8", "#512DA8"]} style={{ borderRadius: 20, padding: 20, marginBottom: 20 }}>
           <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
             <View>
               <Text style={{ color: "rgba(255,255,255,0.7)", fontSize: 11 }}>Disponible · CLP</Text>
-              <Text style={{ color: "#A5F3AE", fontSize: 24, fontWeight: "700" }}>${saldoDisponible.toLocaleString("es-CL")}</Text>
-              <View style={{ flexDirection: "row", gap: 14, marginTop: 12 }}>
+              <Text style={{ color: "#A5F3AE", fontSize: 24, fontWeight: "700" }}>
+                ${saldoDisponible.toLocaleString("es-CL")}
+              </Text>
+              <View style={{ flexDirection: "row", gap: 14, marginTop: 12, alignItems: "center" }}>
                 <View>
                   <Text style={{ color: "rgba(255,255,255,0.6)", fontSize: 10 }}>Gastado</Text>
-                  <Text style={{ color: "#fff", fontSize: 14, fontWeight: "600" }}>${totalGastado.toLocaleString("es-CL")}</Text>
+                  <Text style={{ color: "#fff", fontSize: 14, fontWeight: "600" }}>
+                    ${totalGastado.toLocaleString("es-CL")}
+                  </Text>
                 </View>
                 <View>
-                  <Text style={{ color: "rgba(255,255,255,0.6)", fontSize: 10 }}>Sueldo</Text>
-                  <Text style={{ color: "#fff", fontSize: 14, fontWeight: "600" }}>${sueldoTotal.toLocaleString("es-CL")}</Text>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+                    <Text style={{ color: "rgba(255,255,255,0.6)", fontSize: 10 }}>Sueldo</Text>
+                    <TouchableOpacity onPress={() => {
+                      setNuevoSueldoInput(sueldoTotal.toString());
+                      setEditandoSueldo(true);
+                    }}>
+                      <Feather name="edit-2" size={10} color="#fff" />
+                    </TouchableOpacity>
+                  </View>
+                  <Text style={{ color: "#fff", fontSize: 14, fontWeight: "600" }}>
+                    ${sueldoTotal.toLocaleString("es-CL")}
+                  </Text>
                 </View>
               </View>
             </View>
@@ -195,6 +268,32 @@ export default function ScreenDashboard({ onNav }: { onNav: (i: number) => void 
           </View>
         </LinearGradient>
 
+        {/* Formulario rápido para editar sueldo */}
+        {editandoSueldo && (
+          <View style={{ backgroundColor: "#fff", borderRadius: 14, padding: 16, marginBottom: 20, borderWidth: 1, borderColor: "#512DA8" }}>
+            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+              <Text style={{ fontSize: 15, fontWeight: "700", color: "#1E1B2E" }}>Modificar Sueldo Mensual</Text>
+              <TouchableOpacity onPress={() => setEditandoSueldo(false)}>
+                <Feather name="x" size={18} color="#8A849C" />
+              </TouchableOpacity>
+            </View>
+            <TextInput
+              value={nuevoSueldoInput}
+              onChangeText={setNuevoSueldoInput}
+              keyboardType="numeric"
+              placeholder="Ingresa tu nuevo sueldo"
+              style={{ backgroundColor: "#F5F3FA", borderRadius: 10, paddingHorizontal: 12, height: 42, marginBottom: 12, fontSize: 15, color: "#1E1B2E" }}
+            />
+            <TouchableOpacity
+              onPress={guardarNuevoSueldo}
+              style={{ backgroundColor: "#512DA8", height: 42, borderRadius: 10, alignItems: "center", justifyContent: "center" }}
+            >
+              <Text style={{ color: "#fff", fontWeight: "600", fontSize: 14 }}>Actualizar Sueldo</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Categorías */}
         <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 12 }}>
           <Text style={{ fontSize: 15, fontWeight: "700" }}>Categorías</Text>
           <TouchableOpacity onPress={() => onNav(3)}>
@@ -205,7 +304,6 @@ export default function ScreenDashboard({ onNav }: { onNav: (i: number) => void 
         <View style={{ gap: 10, marginBottom: 20 }}>
           {categoriasDinamicas.map((c) => {
             const p = Math.round((c.spent / c.limit) * 100);
-            // Reasigna el color de las barras gráficas en tiempo real basándose en los umbrales de alerta (80% y 100%).
             const colorBarra = p >= 100 ? "#C62828" : p >= 80 ? "#F9A825" : c.color;
             return (
               <View key={c.id || c.name} style={{ backgroundColor: "#fff", borderRadius: 14, padding: 14 }}>
@@ -221,8 +319,8 @@ export default function ScreenDashboard({ onNav }: { onNav: (i: number) => void 
             );
           })}
         </View>
-      {/* El operador lógico AND (&&) evitacargar el formulario en el Virtual DOM a menos que el usuario
-      seleccione un gasto específico para editar. */}
+
+        {/* Edición de montos de gastos */}
         {idEditar !== null && (
           <View style={{ backgroundColor: "#fff", borderRadius: 14, padding: 16, marginBottom: 20, borderWidth: 1, borderColor: "#512DA8" }}>
             <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
@@ -247,6 +345,7 @@ export default function ScreenDashboard({ onNav }: { onNav: (i: number) => void 
           </View>
         )}
 
+        {/* Gestión de Gastos */}
         <View style={{ backgroundColor: "#fff", borderRadius: 14, padding: 14 }}>
           <Text style={{ fontSize: 16, fontWeight: "700", marginBottom: 15 }}>Gestión de Gastos</Text>
           {listaGastos.length === 0 ? (
@@ -255,16 +354,16 @@ export default function ScreenDashboard({ onNav }: { onNav: (i: number) => void 
             </Text>
           ) : (
             listaGastos.map((gasto) => (
-              <View key={gasto.id} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderColor: '#F5F3FA' }}>
+              <View key={gasto.id} style={{ flexDirection: "row", alignItems: "center", paddingVertical: 12, borderBottomWidth: 1, borderColor: "#F5F3FA" }}>
                 <Text style={{ fontSize: 24, marginRight: 15 }}>{gasto.icono}</Text>
                 <View style={{ flex: 1 }}>
-                  <Text style={{ fontWeight: 'bold', color: "#1E1B2E", fontSize: 16 }}>{gasto.categoria}</Text>
+                  <Text style={{ fontWeight: "bold", color: "#1E1B2E", fontSize: 16 }}>{gasto.categoria}</Text>
                   <Text style={{ color: "#6B6580", fontSize: 12 }}>ID: {gasto.id}</Text>
                 </View>
                 <Text style={{ fontSize: 16, fontWeight: "700", color: "#C62828", marginRight: 12 }}>
                   ${gasto.monto}
                 </Text>
-                <View style={{ flexDirection: 'row', gap: 10 }}>
+                <View style={{ flexDirection: "row", gap: 10 }}>
                   <TouchableOpacity onPress={() => prepararEdicion(gasto)} style={{ padding: 4 }}>
                     <Feather name="edit-2" size={18} color="#512DA8" />
                   </TouchableOpacity>

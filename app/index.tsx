@@ -4,6 +4,7 @@ import { supabase } from "../database/supabase"; // Importa tu cliente de Supaba
 
 import ScreenCategories from "../screens/ScreenCategories";
 import ScreenDashboard from "../screens/ScreenDashboard";
+import ScreenLogin from "../screens/ScreenLogin"; // Arriba con los demás imports
 import ScreenNotifications from "../screens/ScreenNotifications";
 import ScreenOnboarding from "../screens/ScreenOnboarding";
 import ScreenProfile from "../screens/ScreenProfile";
@@ -16,39 +17,49 @@ import ScreenSavingsGoals from "../screens/ScreenSavingsGoals";
 export default function App() {
   const [screen, setScreen] = useState<number | null>(null); // Inicia en null mientras revisa la sesión
 
-  useEffect(() => {
-    // 1. Revisa si hay un usuario logueado en la sesión guardada
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) {
-        setScreen(2); // Usuario autenticado -> va al Dashboard
-      } else {
-        setScreen(9); // Sin cuenta o deslogueado -> va al Registro
-      }
-    });
+ useEffect(() => {
+  // 1. Al abrir la app por primera vez:
+supabase.auth.getSession().then(async ({ data: { session } }) => {
+  if (session?.user) {
+    const { data: perfil } = await supabase
+      .from("perfiles")
+      .select("sueldo")
+      .eq("id", session.user.id)
+      .single();
 
-    // 2. Escucha cambios de sesión en tiempo real (login, logout, etc.)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session?.user) {
-        setScreen(2);
-      } else {
-        setScreen(9);
-      }
-    });
+    if (perfil && perfil.sueldo > 0) {
+      setScreen(2); // Sueldo ya definido -> Dashboard
+    } else {
+      setScreen(1); // Sueldo pendiente -> Configurar sueldo
+    }
+  } else {
+    setScreen(0); // Sin sesión -> Onboarding
+  }
+});
 
-    return () => {
-      subscription.unsubscribe();
-    };
-  }, []);
+  // 2. Escucha si el usuario cierra sesión (logout)
+  const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+    if (event === "SIGNED_OUT") {
+      setScreen(0);
+    }
+  });
+
+  return () => {
+    subscription.unsubscribe();
+  };
+}, []);
 
   const renderScreen = () => {
     switch (screen) {
-      case 0:
-  return (
-    <ScreenOnboarding
-      onRegister={() => setScreen(9)} // Lleva al formulario de registro
-      onNext={() => setScreen(1)}     // Lleva a configurar sueldo
-    />
-  );
+  case 0:
+        return (
+          <ScreenOnboarding
+            onRegister={() => setScreen(9)}
+            onLogin={() => setScreen(10)}
+          />
+        );
+  
+
       case 1:
         return <ScreenSalarySetup onNext={() => setScreen(2)} />;
       case 2:
@@ -67,6 +78,8 @@ export default function App() {
         return <ScreenProfile onNav={setScreen} />;
       case 9:
         return <ScreenRegister onNav={setScreen} />;
+        case 10:
+        return <ScreenLogin onNav={setScreen} />;
       default:
         return <ScreenDashboard onNav={setScreen} />;
     }

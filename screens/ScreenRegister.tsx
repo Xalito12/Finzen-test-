@@ -1,3 +1,4 @@
+// screens/ScreenRegister.tsx
 import { Feather } from "@expo/vector-icons";
 import React, { useState } from "react";
 import {
@@ -14,6 +15,7 @@ import {
 import { supabase } from "../database/supabase";
 
 export default function ScreenRegister({ onNav }: { onNav: (i: number) => void }) {
+  const [nombre, setNombre] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -21,7 +23,7 @@ export default function ScreenRegister({ onNav }: { onNav: (i: number) => void }
   const [verPassword, setVerPassword] = useState(false);
 
   const handleRegistro = async () => {
-    if (!email.trim() || !password.trim()) {
+    if (!nombre.trim() || !email.trim() || !password.trim()) {
       Alert.alert("Atención", "Por favor completa todos los campos.");
       return;
     }
@@ -38,27 +40,35 @@ export default function ScreenRegister({ onNav }: { onNav: (i: number) => void }
 
     try {
       setCargando(true);
-      const { data, error } = await supabase.auth.signUp({
-        email: email.trim(),
-        password: password,
-      });
+      // Pasamos 'nombre' en options.data para que quede en auth.users
+const { data, error } = await supabase.auth.signUp({
+  email: email.trim(),
+  password: password,
+  options: {
+    data: { nombre: nombre.trim() },
+  },
+});
 
-      if (error) {
-        Alert.alert("Error al registrar", error.message);
-        return;
-      }
+if (error) {
+  Alert.alert("Error al registrar", error.message);
+  return;
+}
 
-      if (data.session) {
-        Alert.alert("¡Bienvenido!", "Tu cuenta ha sido creada exitosamente.", [
-          { text: "Continuar", onPress: () => onNav(2) },
-        ]);
-      } else {
-        Alert.alert(
-          "Verifica tu correo",
-          "Te hemos enviado un enlace de confirmación a tu correo electrónico.",
-          [{ text: "Entendido", onPress: () => onNav(2) }]
-        );
-      }
+if (data?.user) {
+  // Insertar el perfil en Supabase
+  await supabase.from("perfiles").upsert({
+    id: data.user.id,
+    nombre: nombre.trim(),
+    sueldo: 0,
+    dia_pago: 1,
+  });
+
+  Alert.alert("¡Bienvenido!", "Tu cuenta ha sido creada exitosamente.", [
+    { text: "Continuar", onPress: () => onNav(1) }, // Lleva a configurar sueldo
+  ]);
+}
+
+
     } catch (err: any) {
       Alert.alert("Error inesperado", err.message || "Ocurrió un error.");
     } finally {
@@ -72,7 +82,7 @@ export default function ScreenRegister({ onNav }: { onNav: (i: number) => void }
       style={{ flex: 1, backgroundColor: "#F5F3FA" }}
     >
       <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: "center", padding: 24 }}>
-        <View style={{ alignItems: "center", marginBottom: 32 }}>
+        <View style={{ alignItems: "center", marginBottom: 28 }}>
           <View
             style={{
               width: 64,
@@ -93,6 +103,31 @@ export default function ScreenRegister({ onNav }: { onNav: (i: number) => void }
         </View>
 
         <View style={{ backgroundColor: "#fff", borderRadius: 16, padding: 20, elevation: 2 }}>
+          {/* Nombre completo */}
+          <Text style={{ fontSize: 12, fontWeight: "600", color: "#6B6580", marginBottom: 6 }}>
+            TU NOMBRE
+          </Text>
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              backgroundColor: "#F5F3FA",
+              borderRadius: 12,
+              paddingHorizontal: 12,
+              marginBottom: 16,
+            }}
+          >
+            <Feather name="user" size={18} color="#8A849C" />
+            <TextInput
+              placeholder="Ej. Renato"
+              placeholderTextColor="#8A849C"
+              value={nombre}
+              onChangeText={setNombre}
+              style={{ flex: 1, paddingVertical: 12, paddingHorizontal: 10, color: "#1E1B2E" }}
+            />
+          </View>
+
+          {/* Correo */}
           <Text style={{ fontSize: 12, fontWeight: "600", color: "#6B6580", marginBottom: 6 }}>
             CORREO ELECTRÓNICO
           </Text>
@@ -118,6 +153,7 @@ export default function ScreenRegister({ onNav }: { onNav: (i: number) => void }
             />
           </View>
 
+          {/* Contraseña */}
           <Text style={{ fontSize: 12, fontWeight: "600", color: "#6B6580", marginBottom: 6 }}>
             CONTRASEÑA
           </Text>
@@ -145,6 +181,7 @@ export default function ScreenRegister({ onNav }: { onNav: (i: number) => void }
             </TouchableOpacity>
           </View>
 
+          {/* Confirmar Contraseña */}
           <Text style={{ fontSize: 12, fontWeight: "600", color: "#6B6580", marginBottom: 6 }}>
             CONFIRMAR CONTRASEÑA
           </Text>
@@ -188,11 +225,13 @@ export default function ScreenRegister({ onNav }: { onNav: (i: number) => void }
           </TouchableOpacity>
         </View>
 
-        <TouchableOpacity
-          onPress={() => onNav(2)}
+<TouchableOpacity
+          onPress={() => onNav(10)}
           style={{ marginTop: 20, alignItems: "center" }}
         >
-          <Text style={{ color: "#512DA8", fontWeight: "600" }}>Volver al Inicio</Text>
+          <Text style={{ color: "#6B6580", fontSize: 14 }}>
+            ¿Ya tienes cuenta? <Text style={{ color: "#512DA8", fontWeight: "700" }}>Inicia sesión</Text>
+          </Text>
         </TouchableOpacity>
       </ScrollView>
     </KeyboardAvoidingView>

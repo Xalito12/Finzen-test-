@@ -5,9 +5,11 @@ import { Alert, Text, TouchableOpacity, View } from "react-native";
 
 export default function ScreenOnboarding({
   onRegister,
+  onLogin,  
   onNext,
 }: {
   onRegister: () => void;
+  onLogin: () => void;
   onNext?: () => void;
 }) {
   const handleGoogleLogin = () => {
@@ -77,6 +79,35 @@ export default function ScreenOnboarding({
           <Text style={{ color: "#fff", fontSize: 15, fontWeight: "600" }}>Crear cuenta con correo</Text>
         </TouchableOpacity>
 
+        <View style={{ gap: 10, marginBottom: 20 }}>
+        <TouchableOpacity
+          onPress={onRegister}
+          style={{
+            height: 50,
+            borderRadius: 14,
+            backgroundColor: "#7E57C2",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <Text style={{ color: "#fff", fontSize: 15, fontWeight: "600" }}>Crear cuenta con correo</Text>
+        </TouchableOpacity>
+
+        {/* Enlace a Iniciar Sesión */}
+        <TouchableOpacity
+          onPress={onLogin}
+          style={{
+            paddingVertical: 12,
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <Text style={{ color: "rgba(255,255,255,0.85)", fontSize: 14 }}>
+            ¿Ya tienes cuenta? <Text style={{ color: "#fff", fontWeight: "700" }}>Inicia sesión</Text>
+          </Text>
+        </TouchableOpacity>
+      </View>
+
         {/* Botón de Google */}
         <TouchableOpacity
           onPress={handleGoogleLogin}
@@ -89,10 +120,14 @@ export default function ScreenOnboarding({
             alignItems: "center",
             justifyContent: "center",
           }}
+          
+          
         >
+
           <Text style={{ color: "#fff", fontSize: 14 }}>Continuar con Google</Text>
         </TouchableOpacity>
       </View>
     </LinearGradient>
   );
+  
 } 
