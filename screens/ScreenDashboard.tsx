@@ -6,9 +6,7 @@ import { Alert, Animated, Text, TextInput, TouchableOpacity, View } from "react-
 import BottomNav from "../components/BottomNav";
 import MiniBadge from "../components/MiniBadge";
 import ProgressBar from "../components/ProgressBar";
-import { db } from "../database/db";
 import { supabase } from "../database/supabase";
-import { respaldarEnLaNube } from "../database/syncService";
 
 export default function ScreenDashboard({ onNav }: { onNav: (i: number) => void }) {
   const [nombreUsuario, setNombreUsuario] = useState("Usuario");
@@ -42,13 +40,13 @@ export default function ScreenDashboard({ onNav }: { onNav: (i: number) => void 
     extrapolate: "clamp",
   });
 
-  // 1. Obtener nombre y sueldo del usuario autenticado desde Supabase
+  // 1. Obtener perfil (nombre y sueldo) desde Supabase
   const cargarUsuarioAuth = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      const { data: perfil, error } = await supabase
+      const { data: perfil } = await supabase
         .from("perfiles")
         .select("nombre, sueldo")
         .eq("id", user.id)
@@ -64,66 +62,87 @@ export default function ScreenDashboard({ onNav }: { onNav: (i: number) => void 
         setNombreUsuario(nombreFallback);
       }
     } catch (err: any) {
-      console.error("Error al cargar perfil desde Supabase:", err.message);
+      console.error("Error al cargar perfil:", err.message);
     }
   };
 
-  // 2. Leer gastos y categorías de SQLite
-  const leerDatosReales = () => {
-    if (!db) {
-      setListaGastos([]);
-      setCategoriasDinamicas([]);
-      return;
-    }
+  // 2. Leer categorías y gastos exclusivos del usuario desde Supabase
+  const leerDatosReales = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
 
-    db.execSync('CREATE TABLE IF NOT EXISTS categorias (id INTEGER PRIMARY KEY AUTOINCREMENT, nombre TEXT, icono TEXT, limite TEXT, color TEXT);');
-    db.execSync('CREATE TABLE IF NOT EXISTS gastos (id INTEGER PRIMARY KEY AUTOINCREMENT, monto TEXT, categoria TEXT, icono TEXT);');
+      // Obtener gastos de este usuario
+      const { data: registrosGastos } = await supabase
+        .from("gastos")
+        .select("*")
+        .eq("usuario_id", user.id)
+        .order("id", { ascending: false });
 
-    const categoriasExistentes = db.getAllSync('SELECT * FROM categorias;') as any[];
-    if (categoriasExistentes.length === 0) {
-      db.runSync('INSERT INTO categorias (nombre, icono, limite, color) VALUES (?, ?, ?, ?);', ["Alimentación", "🍔", "160000", "#7E57C2"]);
-      db.runSync('INSERT INTO categorias (nombre, icono, limite, color) VALUES (?, ?, ?, ?);', ["Transporte", "🚗", "80000", "#F9A825"]);
-      db.runSync('INSERT INTO categorias (nombre, icono, limite, color) VALUES (?, ?, ?, ?);', ["Compras", "🛍️", "130000", "#C62828"]);
-      db.runSync('INSERT INTO categorias (nombre, icono, limite, color) VALUES (?, ?, ?, ?);', ["Salud", "❤️", "55000", "#2E7D32"]);
-    }
+      const listaG = registrosGastos || [];
+      setListaGastos(listaG);
 
-    const categoriasDB = db.getAllSync('SELECT * FROM categorias ORDER BY id ASC;') as any[];
-    const registrosGastos = db.getAllSync('SELECT * FROM gastos ORDER BY id DESC;') as any[];
-    setListaGastos(registrosGastos);
+      let sumaTotal = 0;
+      for (let i = 0; i < listaG.length; i++) {
+        let montoNum = Number(listaG[i].monto);
+        if (!isNaN(montoNum)) sumaTotal += montoNum;
+      }
+      setTotalGastado(sumaTotal);
 
-    let sumaTotal = 0;
-    for (let i = 0; i < registrosGastos.length; i++) {
-      let montoNum = parseInt(registrosGastos[i].monto);
-      if (!isNaN(montoNum)) sumaTotal += montoNum;
-    }
-    setTotalGastado(sumaTotal);
+      // Obtener categorías de este usuario
+      let { data: categoriasDB } = await supabase
+        .from("categorias")
+        .select("*")
+        .eq("usuario_id", user.id)
+        .order("id", { ascending: true });
 
-    const categoriasProcesadas = categoriasDB.map((cat) => {
-      let sumaCat = 0;
-      for (let j = 0; j < registrosGastos.length; j++) {
-        if (
-          registrosGastos[j].categoria === cat.nombre ||
-          (cat.nombre === "Alimentación" && registrosGastos[j].categoria === "Comida")
-        ) {
-          let montoNum = parseInt(registrosGastos[j].monto);
-          if (!isNaN(montoNum)) sumaCat += montoNum;
-        }
+      // Si el usuario es nuevo y no tiene categorías, le creamos las básicas iniciales
+      if (!categoriasDB || categoriasDB.length === 0) {
+        const categoriasBase = [
+          { usuario_id: user.id, nombre: "Alimentación", icono: "🍔", limite: 160000, color: "#7E57C2" },
+          { usuario_id: user.id, nombre: "Transporte", icono: "🚗", limite: 80000, color: "#F9A825" },
+          { usuario_id: user.id, nombre: "Compras", icono: "🛍️", limite: 130000, color: "#C62828" },
+          { usuario_id: user.id, nombre: "Salud", icono: "❤️", limite: 55000, color: "#2E7D32" },
+        ];
+
+        const { data: insertadas } = await supabase
+          .from("categorias")
+          .insert(categoriasBase)
+          .select();
+
+        categoriasDB = insertadas || [];
       }
 
-      let limiteNum = parseInt(cat.limite);
-      if (isNaN(limiteNum) || limiteNum <= 0) limiteNum = 1;
+      // Procesar gastos agrupados por cada categoría
+      const categoriasProcesadas = (categoriasDB || []).map((cat) => {
+        let sumaCat = 0;
+        for (let j = 0; j < listaG.length; j++) {
+          if (
+            listaG[j].categoria === cat.nombre ||
+            (cat.nombre === "Alimentación" && listaG[j].categoria === "Comida")
+          ) {
+            let montoNum = Number(listaG[j].monto);
+            if (!isNaN(montoNum)) sumaCat += montoNum;
+          }
+        }
 
-      return {
-        id: cat.id,
-        name: cat.nombre,
-        spent: sumaCat,
-        limit: limiteNum,
-        color: cat.color || "#512DA8",
-        icono: cat.icono || "🏷️",
-      };
-    });
+        let limiteNum = Number(cat.limite);
+        if (isNaN(limiteNum) || limiteNum <= 0) limiteNum = 1;
 
-    setCategoriasDinamicas(categoriasProcesadas);
+        return {
+          id: cat.id,
+          name: cat.nombre,
+          spent: sumaCat,
+          limit: limiteNum,
+          color: cat.color || "#512DA8",
+          icono: cat.icono || "🏷️",
+        };
+      });
+
+      setCategoriasDinamicas(categoriasProcesadas);
+    } catch (err: any) {
+      console.error("Error al cargar datos de Supabase:", err.message);
+    }
   };
 
   useEffect(() => {
@@ -131,7 +150,7 @@ export default function ScreenDashboard({ onNav }: { onNav: (i: number) => void 
     leerDatosReales();
   }, []);
 
-  // 3. Guardar el nuevo sueldo editado directamente en Supabase
+  // 3. Modificar sueldo directamente en Supabase
   const guardarNuevoSueldo = async () => {
     const valorLimpio = parseInt(nuevoSueldoInput.replace(/[^0-9]/g, ""));
     if (isNaN(valorLimpio) || valorLimpio <= 0) {
@@ -165,12 +184,24 @@ export default function ScreenDashboard({ onNav }: { onNav: (i: number) => void 
     }
   };
 
-  const borrarGasto = (idBorrar: number) => {
-    if (!db) return;
-    db.runSync('DELETE FROM gastos WHERE id = ?;', [idBorrar]);
-    if (idEditar === idBorrar) setIdEditar(null);
-    leerDatosReales();
-    respaldarEnLaNube();
+  // 4. Borrar gasto de Supabase
+  const borrarGasto = async (idBorrar: number) => {
+    try {
+      const { error } = await supabase
+        .from("gastos")
+        .delete()
+        .eq("id", idBorrar);
+
+      if (error) {
+        Alert.alert("Error al eliminar", error.message);
+        return;
+      }
+
+      if (idEditar === idBorrar) setIdEditar(null);
+      leerDatosReales();
+    } catch (err: any) {
+      Alert.alert("Error", err.message);
+    }
   };
 
   const prepararEdicion = (gasto: any) => {
@@ -178,13 +209,33 @@ export default function ScreenDashboard({ onNav }: { onNav: (i: number) => void 
     setMontoEditar(gasto.monto.toString());
   };
 
-  const guardarEdicionGasto = () => {
-    if (!db || idEditar === null) return;
-    db.runSync('UPDATE gastos SET monto = ? WHERE id = ?;', [montoEditar, idEditar]);
-    setIdEditar(null);
-    setMontoEditar("");
-    leerDatosReales();
-    respaldarEnLaNube();
+  // 5. Editar monto de un gasto en Supabase
+  const guardarEdicionGasto = async () => {
+    if (idEditar === null) return;
+    const montoNum = parseInt(montoEditar.replace(/[^0-9]/g, ""));
+
+    if (isNaN(montoNum) || montoNum <= 0) {
+      Alert.alert("Atención", "Ingresa un monto válido.");
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from("gastos")
+        .update({ monto: montoNum })
+        .eq("id", idEditar);
+
+      if (error) {
+        Alert.alert("Error al actualizar", error.message);
+        return;
+      }
+
+      setIdEditar(null);
+      setMontoEditar("");
+      leerDatosReales();
+    } catch (err: any) {
+      Alert.alert("Error", err.message);
+    }
   };
 
   const porcentajeTotal = sueldoTotal > 0 ? Math.round((totalGastado / sueldoTotal) * 100) : 0;
@@ -192,6 +243,7 @@ export default function ScreenDashboard({ onNav }: { onNav: (i: number) => void 
 
   return (
     <View style={{ flex: 1, backgroundColor: "#F5F3FA" }}>
+      {/* Header Animado */}
       <Animated.View
         style={{
           height: headerHeight,
@@ -219,7 +271,7 @@ export default function ScreenDashboard({ onNav }: { onNav: (i: number) => void 
         scrollEventThrottle={16}
         onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: false })}
       >
-        {/* Saludo personalizado */}
+        {/* Saludo dinámico con el nombre del usuario */}
         <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
           <View>
             <Text style={{ fontSize: 13, color: "#6B6580" }}>Buenos días,</Text>
@@ -233,7 +285,7 @@ export default function ScreenDashboard({ onNav }: { onNav: (i: number) => void 
           </TouchableOpacity>
         </View>
 
-        {/* Tarjeta de Saldo y Sueldo */}
+        {/* Tarjeta de Resumen Financiero */}
         <LinearGradient colors={["#512DA8", "#512DA8"]} style={{ borderRadius: 20, padding: 20, marginBottom: 20 }}>
           <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
             <View>
@@ -268,7 +320,7 @@ export default function ScreenDashboard({ onNav }: { onNav: (i: number) => void 
           </View>
         </LinearGradient>
 
-        {/* Formulario rápido para editar sueldo */}
+        {/* Formulario flotante para editar sueldo */}
         {editandoSueldo && (
           <View style={{ backgroundColor: "#fff", borderRadius: 14, padding: 16, marginBottom: 20, borderWidth: 1, borderColor: "#512DA8" }}>
             <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
@@ -282,6 +334,7 @@ export default function ScreenDashboard({ onNav }: { onNav: (i: number) => void 
               onChangeText={setNuevoSueldoInput}
               keyboardType="numeric"
               placeholder="Ingresa tu nuevo sueldo"
+              placeholderTextColor="#8A849C"
               style={{ backgroundColor: "#F5F3FA", borderRadius: 10, paddingHorizontal: 12, height: 42, marginBottom: 12, fontSize: 15, color: "#1E1B2E" }}
             />
             <TouchableOpacity
@@ -293,7 +346,7 @@ export default function ScreenDashboard({ onNav }: { onNav: (i: number) => void 
           </View>
         )}
 
-        {/* Categorías */}
+        {/* Sección de Categorías */}
         <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 12 }}>
           <Text style={{ fontSize: 15, fontWeight: "700" }}>Categorías</Text>
           <TouchableOpacity onPress={() => onNav(3)}>
@@ -320,7 +373,7 @@ export default function ScreenDashboard({ onNav }: { onNav: (i: number) => void 
           })}
         </View>
 
-        {/* Edición de montos de gastos */}
+        {/* Cuadro de edición de un gasto */}
         {idEditar !== null && (
           <View style={{ backgroundColor: "#fff", borderRadius: 14, padding: 16, marginBottom: 20, borderWidth: 1, borderColor: "#512DA8" }}>
             <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
@@ -345,7 +398,7 @@ export default function ScreenDashboard({ onNav }: { onNav: (i: number) => void 
           </View>
         )}
 
-        {/* Gestión de Gastos */}
+        {/* Lista y Gestión de Gastos */}
         <View style={{ backgroundColor: "#fff", borderRadius: 14, padding: 14 }}>
           <Text style={{ fontSize: 16, fontWeight: "700", marginBottom: 15 }}>Gestión de Gastos</Text>
           {listaGastos.length === 0 ? (
@@ -361,7 +414,7 @@ export default function ScreenDashboard({ onNav }: { onNav: (i: number) => void 
                   <Text style={{ color: "#6B6580", fontSize: 12 }}>ID: {gasto.id}</Text>
                 </View>
                 <Text style={{ fontSize: 16, fontWeight: "700", color: "#C62828", marginRight: 12 }}>
-                  ${gasto.monto}
+                  ${Number(gasto.monto).toLocaleString("es-CL")}
                 </Text>
                 <View style={{ flexDirection: "row", gap: 10 }}>
                   <TouchableOpacity onPress={() => prepararEdicion(gasto)} style={{ padding: 4 }}>

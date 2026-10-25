@@ -1,9 +1,16 @@
+// screens/ScreenCategories.tsx
 import { Feather } from "@expo/vector-icons";
 import React, { useEffect, useState } from "react";
-import { ScrollView, Text, TextInput, TouchableOpacity, View } from "react-native";
+import {
+  Alert,
+  ScrollView,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import BottomNav from "../components/BottomNav";
-import { db } from "../database/db";
-import { respaldarEnLaNube } from '../database/syncService';
+import { supabase } from "../database/supabase";
 
 export default function ScreenCategories({ onNav }: { onNav: (i: number) => void }) {
   const [listaCategorias, setListaCategorias] = useState<any[]>([]);
@@ -16,111 +23,193 @@ export default function ScreenCategories({ onNav }: { onNav: (i: number) => void
   const [iconoNuevo, setIconoNuevo] = useState("");
   const [limiteNuevo, setLimiteNuevo] = useState("");
 
-  const cargarCategorias = () => {
-    if (!db) {
-      setListaCategorias([]);
-      return;
-    }
+  // 1. Cargar las categorías y gastos de ESTE usuario desde Supabase
+  const cargarCategorias = async () => {
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
 
-    db.execSync('CREATE TABLE IF NOT EXISTS categorias (id INTEGER PRIMARY KEY AUTOINCREMENT, nombre TEXT, icono TEXT, limite TEXT, color TEXT);');
-    db.execSync('CREATE TABLE IF NOT EXISTS gastos (id INTEGER PRIMARY KEY AUTOINCREMENT, monto TEXT, categoria TEXT, icono TEXT);');
-
-// Se usa 'as any[]' para omitir la validación estricta, ya que SQLite devuelve tipos 'unknown' por defecto.
-    let categoriasDB = db.getAllSync('SELECT * FROM categorias ORDER BY id ASC;') as any[];
-
-    // Valida si la tabla está vacía para poblarla con registros 
-    // iniciales por defecto, mejorando la UX del primer uso.
-    if (categoriasDB.length === 0) {
-      db.runSync('INSERT INTO categorias (nombre, icono, limite, color) VALUES (?, ?, ?, ?);', ["Alimentación", "🍔", "160000", "#7E57C2"]);
-      db.runSync('INSERT INTO categorias (nombre, icono, limite, color) VALUES (?, ?, ?, ?);', ["Transporte", "🚗", "80000", "#F9A825"]);
-      db.runSync('INSERT INTO categorias (nombre, icono, limite, color) VALUES (?, ?, ?, ?);', ["Compras", "🛍️", "130000", "#C62828"]);
-      db.runSync('INSERT INTO categorias (nombre, icono, limite, color) VALUES (?, ?, ?, ?);', ["Salud", "❤️", "55000", "#2E7D32"]);
-      categoriasDB = db.getAllSync('SELECT * FROM categorias ORDER BY id ASC;') as any[];
-      respaldarEnLaNube()
-    }
-// Se usa 'as any[]' para omitir la validación estricta, ya que SQLite devuelve tipos 'unknown' por defecto.
-    const gastosDB = db.getAllSync('SELECT * FROM gastos;') as any[];
-
-    let conteoAlerta = 0;
-    let conteoSobrepasado = 0;
-    let categoriasConTotales = [];
-
-    for (let i = 0; i < categoriasDB.length; i++) {
-      let categoriaActual = { ...categoriasDB[i] };
-      let sumaGastos = 0;
-
-      for (let j = 0; j < gastosDB.length; j++) {
-        if (
-          gastosDB[j].categoria === categoriaActual.nombre ||
-          (categoriaActual.nombre === "Alimentación" && gastosDB[j].categoria === "Comida")
-        ) {
-          let montoGasto = parseInt(gastosDB[j].monto);
-          if (!isNaN(montoGasto)) sumaGastos += montoGasto;
-        }
+      if (!user) {
+        setListaCategorias([]);
+        return;
       }
-      
-      categoriaActual.gastado = sumaGastos;
 
-      let limiteNum = parseInt(categoriaActual.limite);
-      if (isNaN(limiteNum) || limiteNum <= 0) limiteNum = 1;
-      
-      let porcentaje = Math.round((sumaGastos / limiteNum) * 100);
+      // Obtener categorías del usuario
+      let { data: categoriasDB, error: errCat } = await supabase
+        .from("categorias")
+        .select("*")
+        .eq("usuario_id", user.id)
+        .order("id", { ascending: true });
 
-      if (porcentaje > 100) conteoSobrepasado += 1;
-      else if (porcentaje >= 80) conteoAlerta += 1;
+      // Si no tiene categorías, insertar las iniciales asociadas a su usuario_id
+      if (!categoriasDB || categoriasDB.length === 0) {
+        const categoriasBase = [
+          { usuario_id: user.id, nombre: "Alimentación", icono: "🍔", limite: 160000, color: "#7E57C2" },
+          { usuario_id: user.id, nombre: "Transporte", icono: "🚗", limite: 80000, color: "#F9A825" },
+          { usuario_id: user.id, nombre: "Compras", icono: "🛍️", limite: 130000, color: "#C62828" },
+          { usuario_id: user.id, nombre: "Salud", icono: "❤️", limite: 55000, color: "#2E7D32" },
+        ];
 
-      categoriasConTotales.push(categoriaActual);
+        const { data: insertadas } = await supabase
+          .from("categorias")
+          .insert(categoriasBase)
+          .select();
+
+        categoriasDB = insertadas || [];
+      }
+
+      // Obtener gastos de este usuario
+      const { data: gastosDB } = await supabase
+        .from("gastos")
+        .select("*")
+        .eq("usuario_id", user.id);
+
+      const listaGastos = gastosDB || [];
+      let conteoAlerta = 0;
+      let conteoSobrepasado = 0;
+      let categoriasConTotales = [];
+
+      for (let i = 0; i < (categoriasDB || []).length; i++) {
+        let categoriaActual = { ...categoriasDB[i] };
+        let sumaGastos = 0;
+
+        for (let j = 0; j < listaGastos.length; j++) {
+          if (
+            listaGastos[j].categoria === categoriaActual.nombre ||
+            (categoriaActual.nombre === "Alimentación" && listaGastos[j].categoria === "Comida")
+          ) {
+            let montoGasto = parseInt(listaGastos[j].monto);
+            if (!isNaN(montoGasto)) sumaGastos += montoGasto;
+          }
+        }
+
+        categoriaActual.gastado = sumaGastos;
+
+        let limiteNum = parseInt(categoriaActual.limite);
+        if (isNaN(limiteNum) || limiteNum <= 0) limiteNum = 1;
+
+        let porcentaje = Math.round((sumaGastos / limiteNum) * 100);
+
+        if (porcentaje > 100) conteoSobrepasado += 1;
+        else if (porcentaje >= 80) conteoAlerta += 1;
+
+        categoriasConTotales.push(categoriaActual);
+      }
+
+      setListaCategorias(categoriasConTotales);
+      setEnAlerta(conteoAlerta);
+      setSobrepasadas(conteoSobrepasado);
+    } catch (err: any) {
+      console.error("Error al cargar categorías de Supabase:", err.message);
     }
-
-    setListaCategorias(categoriasConTotales);
-    setEnAlerta(conteoAlerta);
-    setSobrepasadas(conteoSobrepasado);
   };
 
-// El arreglo vacío [] indica que cargarCategorias() se ejecutará una sola vez al montar la vista.
   useEffect(() => {
     cargarCategorias();
   }, []);
 
-  const guardarCategoria = () => {
-    if (!db) return;
-    let colorFijo = "#512DA8";
-// Si idEditar es 0, ejecuta un INSERT (Create).
-// Si contiene un ID numérico, ejecuta un UPDATE (Update).
-    if (idEditar === 0) {
-      db.runSync('INSERT INTO categorias (nombre, icono, limite, color) VALUES (?, ?, ?, ?);', [nombreNuevo, iconoNuevo || "🏷️", limiteNuevo || "100000", colorFijo]);
-    } else {
-      db.runSync('UPDATE categorias SET nombre = ?, icono = ?, limite = ? WHERE id = ?;', [nombreNuevo, iconoNuevo || "🏷️", limiteNuevo || "100000", idEditar]);
+  // 2. Guardar o actualizar la categoría en Supabase
+  const guardarCategoria = async () => {
+    if (!nombreNuevo.trim()) {
+      Alert.alert("Atención", "Por favor ingresa un nombre para la categoría.");
+      return;
     }
-    
-    setNombreNuevo("");
-    setIconoNuevo("");
-    setLimiteNuevo("");
-    setIdEditar(0);
-    setMostrarFormulario(false);
-    cargarCategorias();
-    respaldarEnLaNube(); // Llama a la función de respaldo en la nube después de guardar cambios
+
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        Alert.alert("Error", "No hay sesión activa.");
+        return;
+      }
+
+      const colorFijo = "#512DA8";
+      const limiteNum = parseInt(limiteNuevo.replace(/[^0-9]/g, "")) || 100000;
+      const iconoDefinido = iconoNuevo.trim() || "🏷️";
+
+      if (idEditar === 0) {
+        // Crear categoría vinculada al usuario
+        const { error } = await supabase.from("categorias").insert({
+          usuario_id: user.id,
+          nombre: nombreNuevo.trim(),
+          icono: iconoDefinido,
+          limite: limiteNum,
+          color: colorFijo,
+        });
+
+        if (error) {
+          Alert.alert("Error", error.message);
+          return;
+        }
+      } else {
+        // Actualizar categoría existente
+        const { error } = await supabase
+          .from("categorias")
+          .update({
+            nombre: nombreNuevo.trim(),
+            icono: iconoDefinido,
+            limite: limiteNum,
+          })
+          .eq("id", idEditar)
+          .eq("usuario_id", user.id);
+
+        if (error) {
+          Alert.alert("Error", error.message);
+          return;
+        }
+      }
+
+      setNombreNuevo("");
+      setIconoNuevo("");
+      setLimiteNuevo("");
+      setIdEditar(0);
+      setMostrarFormulario(false);
+      cargarCategorias();
+    } catch (err: any) {
+      Alert.alert("Error inesperado", err.message || "No se pudo guardar la categoría.");
+    }
   };
 
   const prepararEdicion = (categoria: any) => {
     setNombreNuevo(categoria.nombre);
     setIconoNuevo(categoria.icono);
-    setLimiteNuevo(categoria.limite);
+    setLimiteNuevo(categoria.limite.toString());
     setIdEditar(categoria.id);
     setMostrarFormulario(true);
-    respaldarEnLaNube()
   };
 
-  const borrarCategoria = (idBorrar: number) => {
-    if (!db) return;
-    db.runSync('DELETE FROM categorias WHERE id = ?;', [idBorrar]);
-    cargarCategorias();
-    respaldarEnLaNube()
+  // 3. Borrar la categoría en Supabase
+  const borrarCategoria = async (idBorrar: number) => {
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) return;
+
+      const { error } = await supabase
+        .from("categorias")
+        .delete()
+        .eq("id", idBorrar)
+        .eq("usuario_id", user.id);
+
+      if (error) {
+        Alert.alert("Error al eliminar", error.message);
+        return;
+      }
+
+      cargarCategorias();
+    } catch (err: any) {
+      Alert.alert("Error", err.message);
+    }
   };
 
   return (
-    <View style={{ flex: 1 }}>
-      <ScrollView contentContainerStyle={{ padding: 20 }}>
+    <View style={{ flex: 1, backgroundColor: "#F5F3FA" }}>
+      <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 100 }}>
         <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
           <Text style={{ fontSize: 24, fontWeight: "900", color: "#1E1B2E" }}>Categorías</Text>
           <TouchableOpacity 
@@ -134,7 +223,6 @@ export default function ScreenCategories({ onNav }: { onNav: (i: number) => void
           </TouchableOpacity>
         </View>
 
-        {/* Renderizado Condicional de React: El operador lógico AND (&&) evita */}
         {mostrarFormulario && (
           <View style={{ backgroundColor: "#fff", padding: 20, borderRadius: 16, marginBottom: 20, elevation: 2 }}>
             <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
@@ -205,7 +293,6 @@ export default function ScreenCategories({ onNav }: { onNav: (i: number) => void
             if (isNaN(limiteNum) || limiteNum <= 0) limiteNum = 1;
             let p = Math.round((c.gastado / limiteNum) * 100);
             
-            //  Reasigna las variables de diseño gráfico en tiempo real basándose en los umbrales de alerta (80% y 100%).
             let colorEstado = "#7E57C2";
             let fondoEstado = "rgba(126, 87, 194, 0.1)";
             let textoEstado = "OK";
