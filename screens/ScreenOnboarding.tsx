@@ -5,12 +5,10 @@ import { Alert, Text, TouchableOpacity, View } from "react-native";
 
 export default function ScreenOnboarding({
   onRegister,
-  onLogin,  
-  onNext,
+  onLogin,
 }: {
   onRegister: () => void;
   onLogin: () => void;
-  onNext?: () => void;
 }) {
   const handleGoogleLogin = () => {
     Alert.alert(
@@ -24,6 +22,7 @@ export default function ScreenOnboarding({
       colors={["#1A1233", "#2D1B6E", "#3F51B5"]}
       style={{ flex: 1, padding: 24, justifyContent: "space-between" }}
     >
+      {/* Logo y Nombre */}
       <View style={{ flexDirection: "row", alignItems: "center", gap: 10, marginTop: 20 }}>
         <View
           style={{
@@ -40,6 +39,7 @@ export default function ScreenOnboarding({
         <Text style={{ color: "#fff", fontSize: 22, fontWeight: "700" }}>FinZen</Text>
       </View>
 
+      {/* Ilustración y Textos centrales */}
       <View style={{ alignItems: "center" }}>
         <View
           style={{
@@ -64,8 +64,9 @@ export default function ScreenOnboarding({
         </Text>
       </View>
 
-      <View style={{ gap: 10, marginBottom: 20 }}>
-        {/* Redirige a la pantalla de registro de Supabase (caso 9) */}
+      {/* Botones inferiores */}
+      <View style={{ gap: 12, marginBottom: 20 }}>
+        {/* Botón Crear Cuenta */}
         <TouchableOpacity
           onPress={onRegister}
           style={{
@@ -79,25 +80,11 @@ export default function ScreenOnboarding({
           <Text style={{ color: "#fff", fontSize: 15, fontWeight: "600" }}>Crear cuenta con correo</Text>
         </TouchableOpacity>
 
-        <View style={{ gap: 10, marginBottom: 20 }}>
-        <TouchableOpacity
-          onPress={onRegister}
-          style={{
-            height: 50,
-            borderRadius: 14,
-            backgroundColor: "#7E57C2",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          <Text style={{ color: "#fff", fontSize: 15, fontWeight: "600" }}>Crear cuenta con correo</Text>
-        </TouchableOpacity>
-
-        {/* Enlace a Iniciar Sesión */}
+        {/* Enlace Iniciar Sesión */}
         <TouchableOpacity
           onPress={onLogin}
           style={{
-            paddingVertical: 12,
+            paddingVertical: 8,
             alignItems: "center",
             justifyContent: "center",
           }}
@@ -106,9 +93,8 @@ export default function ScreenOnboarding({
             ¿Ya tienes cuenta? <Text style={{ color: "#fff", fontWeight: "700" }}>Inicia sesión</Text>
           </Text>
         </TouchableOpacity>
-      </View>
 
-        {/* Botón de Google */}
+        {/* Botón Continuar con Google */}
         <TouchableOpacity
           onPress={handleGoogleLogin}
           style={{
@@ -120,14 +106,10 @@ export default function ScreenOnboarding({
             alignItems: "center",
             justifyContent: "center",
           }}
-          
-          
         >
-
           <Text style={{ color: "#fff", fontSize: 14 }}>Continuar con Google</Text>
         </TouchableOpacity>
       </View>
     </LinearGradient>
   );
-  
-} 
+}
