@@ -12,9 +12,12 @@ interface BottomNavProps {
 export default function BottomNav({ active, onNav }: BottomNavProps) {
   // Obtiene la distancia exacta que ocupan los botones virtuales o la barra gestual del teléfono
   const insets = useSafeAreaInsets();
-  
+
   // Si insets.bottom es 0 (en algunos modelos Android con botones clásicos), damos un margen de respaldo de 12px
-  const paddingInferior = Math.max(insets.bottom, Platform.OS === "android" ? 12 : 16);
+  const paddingInferior = Math.max(
+    insets.bottom,
+    Platform.OS === "android" ? 12 : 16,
+  );
 
   const tabs = [
     { id: 2, label: "Inicio", icon: "home" },
@@ -26,20 +29,9 @@ export default function BottomNav({ active, onNav }: BottomNavProps) {
 
   return (
     <View
+      className="absolute bottom-[0px] left-[0px] right-[0px] bg-card pt-[10px] px-[12px] border-t-[1px] border-t-[#F0EEF6] flex-row items-center justify-around"
       style={{
-        position: "absolute",
-        bottom: 0,
-        left: 0,
-        right: 0,
-        backgroundColor: "#FFFFFF",
         paddingBottom: paddingInferior,
-        paddingTop: 10,
-        paddingHorizontal: 12,
-        borderTopWidth: 1,
-        borderTopColor: "#F0EEF6",
-        flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "space-around",
         elevation: 12, // Sombra en Android
         shadowColor: "#000", // Sombra en iOS
         shadowOffset: { width: 0, height: -3 },
@@ -55,14 +47,10 @@ export default function BottomNav({ active, onNav }: BottomNavProps) {
               key="btn-add"
               activeOpacity={0.85}
               onPress={() => onNav(4)}
+              className="-top-[18px] h-[54px] rounded-[27px] bg-primary items-center justify-center"
               style={{
-                top: -18, // Se eleva ligeramente sobre la barra
+                // Se eleva ligeramente sobre la barra
                 width: 54,
-                height: 54,
-                borderRadius: 27,
-                backgroundColor: "#512DA8",
-                alignItems: "center",
-                justifyContent: "center",
                 elevation: 6,
                 shadowColor: "#512DA8",
                 shadowOffset: { width: 0, height: 4 },
@@ -84,20 +72,12 @@ export default function BottomNav({ active, onNav }: BottomNavProps) {
             key={tab.label}
             activeOpacity={0.7}
             onPress={() => onNav(tab.id)}
-            style={{
-              alignItems: "center",
-              justifyContent: "center",
-              minWidth: 50,
-            }}
+            className="items-center justify-center min-w-[50px]"
           >
             <Feather name={tab.icon as any} size={22} color={iconColor} />
             <Text
-              style={{
-                fontSize: 11,
-                color: textColor,
-                fontWeight: isActive ? "700" : "500",
-                marginTop: 3,
-              }}
+              className="text-[11px] mt-[3px]"
+              style={{ color: textColor, fontWeight: isActive ? "700" : "500" }}
             >
               {tab.label}
             </Text>

@@ -2,22 +2,44 @@ import React from "react";
 import { ScrollView, Text, View } from "react-native";
 import BottomNav from "../components/BottomNav";
 
-export default function ScreenNotifications({ onNav }: { onNav: (i: number) => void }) {
+export default function ScreenNotifications({
+  onNav,
+}: {
+  onNav: (i: number) => void;
+}) {
   const alerts = [
-    { title: "Límite excedido: Compras", desc: "Llevas $158.000 de $130.000 (118%).", color: "#C62828" },
-    { title: "Alerta: Transporte al 93%", desc: "Llevas $74.000 de $80.000.", color: "#F9A825" },
-    { title: "Gasto fijo próximo", desc: "Arriendo se cargará el 1 de septiembre.", color: "#3F51B5" },
+    {
+      title: "Límite excedido: Compras",
+      desc: "Llevas $158.000 de $130.000 (118%).",
+      color: "#C62828",
+    },
+    {
+      title: "Alerta: Transporte al 93%",
+      desc: "Llevas $74.000 de $80.000.",
+      color: "#F9A825",
+    },
+    {
+      title: "Gasto fijo próximo",
+      desc: "Arriendo se cargará el 1 de septiembre.",
+      color: "#3F51B5",
+    },
   ];
 
   return (
-    <View style={{ flex: 1 }}>
+    <View className="flex-1">
       <ScrollView contentContainerStyle={{ padding: 20 }}>
-        <Text style={{ fontSize: 20, fontWeight: "700", marginBottom: 16 }}>Notificaciones</Text>
-        <View style={{ gap: 10 }}>
+        <Text className="text-[20px] font-bold mb-[16px]">Notificaciones</Text>
+        <View className="gap-[10px]">
           {alerts.map((a, i) => (
-            <View key={i} style={{ backgroundColor: "#fff", borderRadius: 14, padding: 14, borderLeftWidth: 4, borderLeftColor: a.color }}>
-              <Text style={{ fontSize: 14, fontWeight: "600", marginBottom: 4 }}>{a.title}</Text>
-              <Text style={{ fontSize: 12, color: "#6B6580" }}>{a.desc}</Text>
+            <View
+              key={i}
+              className="bg-card rounded-[14px] p-[14px]"
+              style={{ borderLeftWidth: 4, borderLeftColor: a.color }}
+            >
+              <Text className="text-[14px] font-semibold mb-[4px]">
+                {a.title}
+              </Text>
+              <Text className="text-[12px] text-text-secondary">{a.desc}</Text>
             </View>
           ))}
         </View>

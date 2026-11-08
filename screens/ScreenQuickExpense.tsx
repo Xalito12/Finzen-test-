@@ -13,7 +13,11 @@ import {
 import BottomNav from "../components/BottomNav";
 import { supabase } from "../database/supabase";
 
-export default function ScreenQuickExpense({ onNav }: { onNav: (i: number) => void }) {
+export default function ScreenQuickExpense({
+  onNav,
+}: {
+  onNav: (i: number) => void;
+}) {
   const [crearCategoria, setCrearCategoria] = useState(false);
   const [nombreCategoria, setNombreCategoria] = useState("");
   const [creando, setCreando] = useState(false);
@@ -64,16 +68,29 @@ export default function ScreenQuickExpense({ onNav }: { onNav: (i: number) => vo
     if (!nombre || creando) return;
     setCreando(true);
     try {
-      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      const {
+        data: { user },
+        error: authError,
+      } = await supabase.auth.getUser();
       if (authError) throw authError;
       if (!user) throw new Error("No hay una sesión activa.");
-      const existente = cats.findIndex(c => c.nombre.toLowerCase() === nombre.toLowerCase());
+      const existente = cats.findIndex(
+        (c) => c.nombre.toLowerCase() === nombre.toLowerCase(),
+      );
       if (existente >= 0) {
         setSelected(existente);
       } else {
-        const { data, error } = await supabase.from("categorias").insert({
-          usuario_id: user.id, nombre, icono: "🏷️", limite: 100000, color: "#512DA8",
-        }).select().single();
+        const { data, error } = await supabase
+          .from("categorias")
+          .insert({
+            usuario_id: user.id,
+            nombre,
+            icono: "🏷️",
+            limite: 100000,
+            color: "#512DA8",
+          })
+          .select()
+          .single();
         if (error) throw error;
         setSelected(cats.length);
         setCats([...cats, data]);
@@ -133,36 +150,41 @@ export default function ScreenQuickExpense({ onNav }: { onNav: (i: number) => vo
       // Vuelve al Dashboard tras registrar el gasto
       onNav(2);
     } catch (err: any) {
-      Alert.alert("Error inesperado", err.message || "No se pudo guardar el gasto.");
+      Alert.alert(
+        "Error inesperado",
+        err.message || "No se pudo guardar el gasto.",
+      );
     } finally {
       setGuardando(false);
     }
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: "#F5F3FA" }}>
+    <View className="flex-1 bg-bg">
       <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 100 }}>
         {/* Cabecera */}
-        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-          <Text style={{ fontSize: 20, fontWeight: "700", color: "#1E1B2E" }}>Nuevo gasto</Text>
+        <View className="flex-row justify-between items-center mb-[20px]">
+          <Text className="text-[20px] font-bold text-text">Nuevo gasto</Text>
           <TouchableOpacity onPress={() => onNav(2)}>
             <Feather name="x" size={24} color="#6B6580" />
           </TouchableOpacity>
         </View>
 
         {/* Display del Monto */}
-        <View style={{ alignItems: "center", marginBottom: 24 }}>
-          <Text style={{ color: "#6B6580", fontSize: 13 }}>¿Cuánto gastaste?</Text>
-          <Text style={{ fontSize: 42, fontWeight: "700", color: "#1E1B2E" }}>${amount}</Text>
+        <View className="items-center mb-[24px]">
+          <Text className="text-text-secondary text-[13px]">
+            ¿Cuánto gastaste?
+          </Text>
+          <Text className="text-[42px] font-bold text-text">${amount}</Text>
         </View>
 
         {/* Selector de Categorías */}
         {cargando ? (
-          <ActivityIndicator color="#512DA8" style={{ marginVertical: 20 }} />
+          <ActivityIndicator color="#512DA8" className="my-[20px]" />
         ) : (
-          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 20 }}>
+          <View className="flex-row flex-wrap gap-[8px] mb-[20px]">
             {cats.length === 0 ? (
-              <Text style={{ color: "#6B6580", fontSize: 13, textAlign: "center", width: "100%", marginVertical: 10 }}>
+              <Text className="text-text-secondary text-[13px] text-center w-[100%] my-[10px]">
                 No tienes categorías. Agrega una con Otros…
               </Text>
             ) : (
@@ -170,67 +192,71 @@ export default function ScreenQuickExpense({ onNav }: { onNav: (i: number) => vo
                 <TouchableOpacity
                   key={c.id || c.nombre}
                   onPress={() => setSelected(i)}
+                  className="w-[31%] py-[12px] rounded-[12px] border-[1px] items-center"
                   style={{
-                    width: "31%",
-                    paddingVertical: 12,
-                    borderRadius: 12,
-                    borderWidth: 1,
                     borderColor: selected === i ? "#512DA8" : "#E8E4F0",
                     backgroundColor: selected === i ? "#512DA8" : "#fff",
-                    alignItems: "center",
                   }}
                 >
-                  <Text style={{ fontSize: 20 }}>{c.icono}</Text>
+                  <Text className="text-[20px]">{c.icono}</Text>
                   <Text
                     numberOfLines={1}
-                    style={{
-                      fontSize: 11,
-                      color: selected === i ? "#fff" : "#1E1B2E",
-                      fontWeight: "500",
-                      marginTop: 4,
-                    }}
+                    className="text-[11px] font-medium mt-[4px]"
+                    style={{ color: selected === i ? "#fff" : "#1E1B2E" }}
                   >
                     {c.nombre}
                   </Text>
                 </TouchableOpacity>
               ))
             )}
-            <TouchableOpacity onPress={() => setCrearCategoria(true)} style={{ width: "31%", paddingVertical: 12, borderRadius: 12, backgroundColor: "#fff", alignItems: "center", borderWidth: 1, borderColor: "#E8E4F0" }}>
+            <TouchableOpacity
+              onPress={() => setCrearCategoria(true)}
+              className="w-[31%] py-[12px] rounded-[12px] bg-card items-center border-[1px] border-border"
+            >
               <Feather name="plus" size={20} color="#512DA8" />
-              <Text style={{ color: "#512DA8", marginTop: 4 }}>Otros…</Text>
+              <Text className="text-primary mt-[4px]">Otros…</Text>
             </TouchableOpacity>
           </View>
         )}
         {crearCategoria && (
-          <View style={{ padding: 16, backgroundColor: "#fff", borderRadius: 12, marginBottom: 20, gap: 12 }}>
-            <Text style={{ fontWeight: "700" }}>Nueva categoría</Text>
-            <TextInput autoFocus placeholder="Ej. Mascotas" value={nombreCategoria} onChangeText={setNombreCategoria} style={{ padding: 12, backgroundColor: "#F5F3FA", borderRadius: 8 }} />
-            <Text style={{ color: "#6B6580", fontSize: 12 }}>Límite inicial: $100.000. Puedes editarlo en Categorías.</Text>
-            <TouchableOpacity disabled={creando || !nombreCategoria.trim()} onPress={guardarNuevaCategoria}>
-              <Text style={{ color: "#512DA8", fontWeight: "700" }}>{creando ? "Creando…" : "Crear y seleccionar"}</Text>
+          <View className="p-[16px] bg-card rounded-[12px] mb-[20px] gap-[12px]">
+            <Text className="font-bold">Nueva categoría</Text>
+            <TextInput
+              autoFocus
+              placeholder="Ej. Mascotas"
+              value={nombreCategoria}
+              onChangeText={setNombreCategoria}
+              className="p-[12px] bg-bg rounded-[8px]"
+            />
+            <Text className="text-text-secondary text-[12px]">
+              Límite inicial: $100.000. Puedes editarlo en Categorías.
+            </Text>
+            <TouchableOpacity
+              disabled={creando || !nombreCategoria.trim()}
+              onPress={guardarNuevaCategoria}
+            >
+              <Text className="text-primary font-bold">
+                {creando ? "Creando…" : "Crear y seleccionar"}
+              </Text>
             </TouchableOpacity>
-            <TouchableOpacity disabled={creando} onPress={() => setCrearCategoria(false)}><Text>Cancelar</Text></TouchableOpacity>
+            <TouchableOpacity
+              disabled={creando}
+              onPress={() => setCrearCategoria(false)}
+            >
+              <Text>Cancelar</Text>
+            </TouchableOpacity>
           </View>
         )}
 
         {/* Teclado Numérico */}
-        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 20 }}>
+        <View className="flex-row flex-wrap gap-[8px] mb-[20px]">
           {keys.map((k) => (
             <TouchableOpacity
               key={k}
               onPress={() => handleKey(k)}
-              style={{
-                width: "31%",
-                height: 48,
-                borderRadius: 10,
-                backgroundColor: "#fff",
-                alignItems: "center",
-                justifyContent: "center",
-                borderWidth: 1,
-                borderColor: "#E8E4F0",
-              }}
+              className="w-[31%] h-[48px] rounded-[10px] bg-card items-center justify-center border-[1px] border-border"
             >
-              <Text style={{ fontSize: 18, fontWeight: "600", color: "#1E1B2E" }}>{k}</Text>
+              <Text className="text-[18px] font-semibold text-text">{k}</Text>
             </TouchableOpacity>
           ))}
         </View>
@@ -239,18 +265,20 @@ export default function ScreenQuickExpense({ onNav }: { onNav: (i: number) => vo
         <TouchableOpacity
           onPress={guardarGastoReal}
           disabled={cats.length === 0 || amount === "0" || guardando}
+          className="h-[50px] rounded-[14px] items-center justify-center"
           style={{
-            height: 50,
-            borderRadius: 14,
-            backgroundColor: cats.length === 0 || amount === "0" || guardando ? "#B39DDB" : "#512DA8",
-            alignItems: "center",
-            justifyContent: "center",
+            backgroundColor:
+              cats.length === 0 || amount === "0" || guardando
+                ? "#B39DDB"
+                : "#512DA8",
           }}
         >
           {guardando ? (
             <ActivityIndicator color="#fff" />
           ) : (
-            <Text style={{ color: "#fff", fontSize: 15, fontWeight: "600" }}>Registrar gasto</Text>
+            <Text className="text-card text-[15px] font-semibold">
+              Registrar gasto
+            </Text>
           )}
         </TouchableOpacity>
       </ScrollView>

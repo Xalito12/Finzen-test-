@@ -13,7 +13,7 @@ export default function ScreenOnboarding({
   const handleGoogleLogin = () => {
     Alert.alert(
       "Inicio con Google",
-      "Próximamente disponible. Por ahora regístrate usando tu correo electrónico."
+      "Próximamente disponible. Por ahora regístrate usando tu correo electrónico.",
     );
   };
 
@@ -23,91 +23,75 @@ export default function ScreenOnboarding({
       style={{ flex: 1, padding: 24, justifyContent: "space-between" }}
     >
       {/* Logo y Nombre */}
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 10, marginTop: 20 }}>
+      <View className="flex-row items-center gap-[10px] mt-[20px]">
         <View
-          style={{
-            width: 42,
-            height: 42,
-            borderRadius: 12,
-            backgroundColor: "rgba(255,255,255,0.15)",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
+          className="w-[42px] h-[42px] rounded-[12px] items-center justify-center"
+          style={{ backgroundColor: "rgba(255,255,255,0.15)" }}
         >
           <Feather name="credit-card" size={22} color="#fff" />
         </View>
-        <Text style={{ color: "#fff", fontSize: 22, fontWeight: "700" }}>FinZen</Text>
+        <Text className="text-card text-[22px] font-bold">FinZen</Text>
       </View>
 
       {/* Ilustración y Textos centrales */}
-      <View style={{ alignItems: "center" }}>
-        <View
-          style={{
-            width: 170,
-            height: 170,
-            borderRadius: 85,
-            borderWidth: 10,
-            borderColor: "#7E57C2",
-            alignItems: "center",
-            justifyContent: "center",
-            marginBottom: 28,
-          }}
-        >
-          <Text style={{ color: "#fff", fontSize: 32, fontWeight: "700" }}>68%</Text>
-          <Text style={{ color: "rgba(255,255,255,0.6)", fontSize: 12 }}>presupuesto</Text>
+      <View className="items-center">
+        <View className="w-[170px] h-[170px] rounded-[85px] border-[10px] border-accent items-center justify-center mb-[28px]">
+          <Text className="text-card text-[32px] font-bold">68%</Text>
+          <Text
+            className="text-[12px]"
+            style={{ color: "rgba(255,255,255,0.6)" }}
+          >
+            presupuesto
+          </Text>
         </View>
-        <Text style={{ color: "#fff", fontSize: 26, fontWeight: "700", textAlign: "center", marginBottom: 8 }}>
+        <Text className="text-card text-[26px] font-bold text-center mb-[8px]">
           Tu dinero, bajo control
         </Text>
-        <Text style={{ color: "rgba(255,255,255,0.6)", fontSize: 14, textAlign: "center", lineHeight: 20 }}>
-          Visualiza gastos, evita deudas y alcanza tus metas de ahorro fácilmente.
+        <Text
+          className="text-[14px] text-center leading-[20px]"
+          style={{ color: "rgba(255,255,255,0.6)" }}
+        >
+          Visualiza gastos, evita deudas y alcanza tus metas de ahorro
+          fácilmente.
         </Text>
       </View>
 
       {/* Botones inferiores */}
-      <View style={{ gap: 12, marginBottom: 20 }}>
+      <View className="gap-[12px] mb-[20px]">
         {/* Botón Crear Cuenta */}
         <TouchableOpacity
           onPress={onRegister}
-          style={{
-            height: 50,
-            borderRadius: 14,
-            backgroundColor: "#7E57C2",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
+          className="h-[50px] rounded-[14px] bg-accent items-center justify-center"
         >
-          <Text style={{ color: "#fff", fontSize: 15, fontWeight: "600" }}>Crear cuenta con correo</Text>
+          <Text className="text-card text-[15px] font-semibold">
+            Crear cuenta con correo
+          </Text>
         </TouchableOpacity>
 
         {/* Enlace Iniciar Sesión */}
         <TouchableOpacity
           onPress={onLogin}
-          style={{
-            paddingVertical: 8,
-            alignItems: "center",
-            justifyContent: "center",
-          }}
+          className="py-[8px] items-center justify-center"
         >
-          <Text style={{ color: "rgba(255,255,255,0.85)", fontSize: 14 }}>
-            ¿Ya tienes cuenta? <Text style={{ color: "#fff", fontWeight: "700" }}>Inicia sesión</Text>
+          <Text
+            className="text-[14px]"
+            style={{ color: "rgba(255,255,255,0.85)" }}
+          >
+            ¿Ya tienes cuenta?{" "}
+            <Text className="text-card font-bold">Inicia sesión</Text>
           </Text>
         </TouchableOpacity>
 
         {/* Botón Continuar con Google */}
         <TouchableOpacity
           onPress={handleGoogleLogin}
+          className="h-[50px] rounded-[14px] border-[1px] items-center justify-center"
           style={{
-            height: 50,
-            borderRadius: 14,
             backgroundColor: "rgba(255,255,255,0.1)",
-            borderWidth: 1,
             borderColor: "rgba(255,255,255,0.2)",
-            alignItems: "center",
-            justifyContent: "center",
           }}
         >
-          <Text style={{ color: "#fff", fontSize: 14 }}>Continuar con Google</Text>
+          <Text className="text-card text-[14px]">Continuar con Google</Text>
         </TouchableOpacity>
       </View>
     </LinearGradient>

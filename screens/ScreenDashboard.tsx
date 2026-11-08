@@ -2,13 +2,30 @@
 import { Feather } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import React, { useEffect, useState } from "react";
-import { Alert, ScrollView, Text, TextInput, TouchableOpacity, View } from "react-native";
+import {
+  ActivityIndicator,
+  Alert,
+  ScrollView,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import BottomNav from "../components/BottomNav";
 import MiniBadge from "../components/MiniBadge";
 import ProgressBar from "../components/ProgressBar";
 import { supabase } from "../database/supabase";
 
-export default function ScreenDashboard({ onNav }: { onNav: (i: number) => void }) {
+export default function ScreenDashboard({
+  onNav,
+  active = true,
+}: {
+  active?: boolean;
+  onNav: (i: number) => void;
+}) {
+  const [perfilCargado, setPerfilCargado] = useState(false);
+  const [cargandoPerfil, setCargandoPerfil] = useState(true);
+  const [errorPerfil, setErrorPerfil] = useState(false);
   const [nombreUsuario, setNombreUsuario] = useState("Usuario");
   const [sueldoTotal, setSueldoTotal] = useState(0);
   const [editandoSueldo, setEditandoSueldo] = useState(false);
@@ -23,58 +40,71 @@ export default function ScreenDashboard({ onNav }: { onNav: (i: number) => void 
   // 1. Obtener perfil (nombre y sueldo) desde Supabase
   const cargarUsuarioAuth = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) throw new Error("No hay una sesión activa.");
 
-      const { data: perfil } = await supabase
+      const { data: perfil, error } = await supabase
         .from("perfiles")
         .select("nombre, sueldo")
         .eq("id", user.id)
         .single();
 
+      if (error) throw error;
+
       if (perfil) {
-        setNombreUsuario(perfil.nombre || user.email?.split("@")[0] || "Usuario");
-        if (perfil.sueldo) {
-          setSueldoTotal(Number(perfil.sueldo));
-        }
+        setNombreUsuario(
+          perfil.nombre || user.email?.split("@")[0] || "Usuario",
+        );
+        setSueldoTotal(Number(perfil.sueldo) || 0);
       } else {
-        const nombreFallback = user.user_metadata?.nombre || user.email?.split("@")[0] || "Usuario";
+        const nombreFallback =
+          user.user_metadata?.nombre || user.email?.split("@")[0] || "Usuario";
         setNombreUsuario(nombreFallback);
       }
+      setPerfilCargado(true);
+      setErrorPerfil(false);
     } catch (err: any) {
+      setErrorPerfil(true);
       console.error("Error al cargar perfil:", err.message);
+    } finally {
+      setCargandoPerfil(false);
     }
   };
 
   // 2. Leer categorías y gastos exclusivos del usuario desde Supabase
   const leerDatosReales = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (!user) return;
 
       // Obtener gastos de este usuario
-      const { data: registrosGastos } = await supabase
+      const { data: registrosGastos, error: errorGastos } = await supabase
         .from("gastos")
         .select("*")
         .eq("usuario_id", user.id)
         .order("id", { ascending: false });
 
+      if (errorGastos) throw errorGastos;
       const listaG = registrosGastos || [];
-      setListaGastos(listaG);
 
       let sumaTotal = 0;
       for (let i = 0; i < listaG.length; i++) {
         let montoNum = Number(listaG[i].monto);
         if (!isNaN(montoNum)) sumaTotal += montoNum;
       }
-      setTotalGastado(sumaTotal);
 
       // Obtener categorías de este usuario
-      const { data: categoriasDB } = await supabase
+      const { data: categoriasDB, error: errorCategorias } = await supabase
         .from("categorias")
         .select("*")
         .eq("usuario_id", user.id)
         .order("id", { ascending: true });
+
+      if (errorCategorias) throw errorCategorias;
 
       // Procesar gastos agrupados por cada categoría
       const categoriasProcesadas = (categoriasDB || []).map((cat) => {
@@ -102,6 +132,8 @@ export default function ScreenDashboard({ onNav }: { onNav: (i: number) => void 
         };
       });
 
+      setListaGastos(listaG);
+      setTotalGastado(sumaTotal);
       setCategoriasDinamicas(categoriasProcesadas);
     } catch (err: any) {
       console.error("Error al cargar datos de Supabase:", err.message);
@@ -109,9 +141,13 @@ export default function ScreenDashboard({ onNav }: { onNav: (i: number) => void 
   };
 
   useEffect(() => {
+    if (!active) return;
+    setEditandoSueldo(false);
+    setIdEditar(null);
+    // Al regresar, conserva los datos visibles mientras consulta los nuevos.
     cargarUsuarioAuth();
     leerDatosReales();
-  }, []);
+  }, [active]);
 
   // 3. Modificar sueldo directamente en Supabase
   const guardarNuevoSueldo = async () => {
@@ -122,7 +158,9 @@ export default function ScreenDashboard({ onNav }: { onNav: (i: number) => void 
     }
 
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (!user) {
         Alert.alert("Error", "No hay sesión activa.");
         return;
@@ -201,68 +239,129 @@ export default function ScreenDashboard({ onNav }: { onNav: (i: number) => void 
     }
   };
 
-  const porcentajeTotal = sueldoTotal > 0 ? Math.round((totalGastado / sueldoTotal) * 100) : 0;
+  const porcentajeTotal =
+    sueldoTotal > 0 ? Math.round((totalGastado / sueldoTotal) * 100) : 0;
   const saldoDisponible = sueldoTotal - totalGastado;
 
+  if (!perfilCargado) {
+    return (
+      <View className="flex-1 bg-bg items-center justify-center">
+        {cargandoPerfil ? (
+          <ActivityIndicator size="large" color="#512DA8" />
+        ) : (
+          <View className="items-center p-[20px]">
+            <Text className="text-text-secondary">
+              No se pudo cargar tu perfil.
+            </Text>
+            <TouchableOpacity
+              onPress={() => {
+                setCargandoPerfil(true);
+                cargarUsuarioAuth();
+                leerDatosReales();
+              }}
+              className="bg-primary rounded-[12px] p-[16px] mt-[12px]"
+            >
+              <Text className="text-white font-bold">Reintentar</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+        <BottomNav active={2} onNav={onNav} />
+      </View>
+    );
+  }
+
   return (
-    <View style={{ flex: 1, backgroundColor: "#F5F3FA" }}>
-      <ScrollView
-        contentContainerStyle={{ padding: 20, paddingBottom: 100 }}
-      >
+    <View className="flex-1 bg-bg">
+      {errorPerfil && (
+        <Text className="text-error p-[12px]">
+          No se pudo actualizar el perfil. Se muestran los últimos datos
+          cargados.
+        </Text>
+      )}
+      <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 100 }}>
         {/* Saludo dinámico con el nombre del usuario */}
-        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+        <View className="flex-row justify-between items-center mb-[20px]">
           <View>
-            <Text style={{ fontSize: 13, color: "#6B6580" }}>Buenos días,</Text>
-            <Text style={{ fontSize: 20, fontWeight: "700", color: "#1E1B2E" }}>{nombreUsuario} 👋</Text>
+            <Text className="text-[13px] text-text-secondary">
+              Buenos días,
+            </Text>
+            <Text className="text-[20px] font-bold text-text">
+              {nombreUsuario} 👋
+            </Text>
           </View>
           <TouchableOpacity
             onPress={() => onNav(6)}
-            style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: "#fff", alignItems: "center", justifyContent: "center" }}
+            className="w-[40px] h-[40px] rounded-[12px] bg-card items-center justify-center"
           >
             <Feather name="bell" size={20} color="#512DA8" />
           </TouchableOpacity>
         </View>
 
         {/* Tarjeta de Resumen Financiero */}
-        <LinearGradient colors={["#512DA8", "#512DA8"]} style={{ borderRadius: 20, padding: 20, marginBottom: 20 }}>
-          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+        <LinearGradient
+          colors={["#512DA8", "#512DA8"]}
+          style={{ borderRadius: 20, padding: 20, marginBottom: 20 }}
+        >
+          <View className="flex-row justify-between items-center">
             <View>
-              <Text style={{ color: "rgba(255,255,255,0.7)", fontSize: 11 }}>Disponible · CLP</Text>
-              <Text style={{ color: "#A5F3AE", fontSize: 24, fontWeight: "700" }}>
+              <Text
+                className="text-[11px]"
+                style={{ color: "rgba(255,255,255,0.7)" }}
+              >
+                Disponible · CLP
+              </Text>
+              <Text className="text-[#A5F3AE] text-[24px] font-bold">
                 ${saldoDisponible.toLocaleString("es-CL")}
               </Text>
-              <View style={{ flexDirection: "row", gap: 14, marginTop: 12, alignItems: "center" }}>
+              <View className="flex-row gap-[14px] mt-[12px] items-center">
                 <View>
-                  <Text style={{ color: "rgba(255,255,255,0.6)", fontSize: 10 }}>Gastado</Text>
-                  <Text style={{ color: "#fff", fontSize: 14, fontWeight: "600" }}>
+                  <Text
+                    className="text-[10px]"
+                    style={{ color: "rgba(255,255,255,0.6)" }}
+                  >
+                    Gastado
+                  </Text>
+                  <Text className="text-card text-[14px] font-semibold">
                     ${totalGastado.toLocaleString("es-CL")}
                   </Text>
                 </View>
                 <View>
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-                    <Text style={{ color: "rgba(255,255,255,0.6)", fontSize: 10 }}>Sueldo</Text>
-                    <TouchableOpacity onPress={() => {
-                      setNuevoSueldoInput(sueldoTotal.toString());
-                      setEditandoSueldo(true);
-                    }}>
+                  <View className="flex-row items-center gap-[4px]">
+                    <Text
+                      className="text-[10px]"
+                      style={{ color: "rgba(255,255,255,0.6)" }}
+                    >
+                      Sueldo
+                    </Text>
+                    <TouchableOpacity
+                      onPress={() => {
+                        setNuevoSueldoInput(sueldoTotal.toString());
+                        setEditandoSueldo(true);
+                      }}
+                    >
                       <Feather name="edit-2" size={10} color="#fff" />
                     </TouchableOpacity>
                   </View>
-                  <Text style={{ color: "#fff", fontSize: 14, fontWeight: "600" }}>
+                  <Text className="text-card text-[14px] font-semibold">
                     ${sueldoTotal.toLocaleString("es-CL")}
                   </Text>
                 </View>
               </View>
             </View>
-            <MiniBadge percent={porcentajeTotal} color="rgba(255,255,255,0.85)" />
+            <MiniBadge
+              percent={porcentajeTotal}
+              color="rgba(255,255,255,0.85)"
+            />
           </View>
         </LinearGradient>
 
         {/* Formulario flotante para editar sueldo */}
         {editandoSueldo && (
-          <View style={{ backgroundColor: "#fff", borderRadius: 14, padding: 16, marginBottom: 20, borderWidth: 1, borderColor: "#512DA8" }}>
-            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-              <Text style={{ fontSize: 15, fontWeight: "700", color: "#1E1B2E" }}>Modificar Sueldo Mensual</Text>
+          <View className="bg-card rounded-[14px] p-[16px] mb-[20px] border-[1px] border-primary">
+            <View className="flex-row justify-between items-center mb-[8px]">
+              <Text className="text-[15px] font-bold text-text">
+                Modificar Sueldo Mensual
+              </Text>
               <TouchableOpacity onPress={() => setEditandoSueldo(false)}>
                 <Feather name="x" size={18} color="#8A849C" />
               </TouchableOpacity>
@@ -273,37 +372,47 @@ export default function ScreenDashboard({ onNav }: { onNav: (i: number) => void 
               keyboardType="numeric"
               placeholder="Ingresa tu nuevo sueldo"
               placeholderTextColor="#8A849C"
-              style={{ backgroundColor: "#F5F3FA", borderRadius: 10, paddingHorizontal: 12, height: 42, marginBottom: 12, fontSize: 15, color: "#1E1B2E" }}
+              className="bg-bg rounded-[10px] px-[12px] h-[42px] mb-[12px] text-[15px] text-text"
             />
             <TouchableOpacity
               onPress={guardarNuevoSueldo}
-              style={{ backgroundColor: "#512DA8", height: 42, borderRadius: 10, alignItems: "center", justifyContent: "center" }}
+              className="bg-primary h-[42px] rounded-[10px] items-center justify-center"
             >
-              <Text style={{ color: "#fff", fontWeight: "600", fontSize: 14 }}>Actualizar Sueldo</Text>
+              <Text className="text-card font-semibold text-[14px]">
+                Actualizar Sueldo
+              </Text>
             </TouchableOpacity>
           </View>
         )}
 
         {/* Sección de Categorías */}
-        <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 12 }}>
-          <Text style={{ fontSize: 15, fontWeight: "700" }}>Categorías</Text>
+        <View className="flex-row justify-between mb-[12px]">
+          <Text className="text-[15px] font-bold">Categorías</Text>
           <TouchableOpacity onPress={() => onNav(3)}>
-            <Text style={{ color: "#512DA8", fontSize: 13, fontWeight: "600" }}>Ver todas</Text>
+            <Text className="text-primary text-[13px] font-semibold">
+              Ver todas
+            </Text>
           </TouchableOpacity>
         </View>
 
-        <View style={{ gap: 10, marginBottom: 20 }}>
+        <View className="gap-[10px] mb-[20px]">
           {categoriasDinamicas.map((c) => {
             const p = Math.round((c.spent / c.limit) * 100);
-            const colorBarra = p >= 100 ? "#C62828" : p >= 80 ? "#F9A825" : c.color;
+            const colorBarra =
+              p >= 100 ? "#C62828" : p >= 80 ? "#F9A825" : c.color;
             return (
-              <View key={c.id || c.name} style={{ backgroundColor: "#fff", borderRadius: 14, padding: 14 }}>
-                <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 8 }}>
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                    <Text style={{ fontSize: 16 }}>{c.icono}</Text>
-                    <Text style={{ fontWeight: "600", fontSize: 14 }}>{c.name}</Text>
+              <View
+                key={c.id || c.name}
+                className="bg-card rounded-[14px] p-[14px]"
+              >
+                <View className="flex-row justify-between mb-[8px]">
+                  <View className="flex-row items-center gap-[8px]">
+                    <Text className="text-[16px]">{c.icono}</Text>
+                    <Text className="font-semibold text-[14px]">{c.name}</Text>
                   </View>
-                  <Text style={{ fontWeight: "700", color: colorBarra }}>${c.spent.toLocaleString("es-CL")}</Text>
+                  <Text className="font-bold" style={{ color: colorBarra }}>
+                    ${c.spent.toLocaleString("es-CL")}
+                  </Text>
                 </View>
                 <ProgressBar percent={p} color={colorBarra} />
               </View>
@@ -313,52 +422,73 @@ export default function ScreenDashboard({ onNav }: { onNav: (i: number) => void 
 
         {/* Cuadro de edición de un gasto */}
         {idEditar !== null && (
-          <View style={{ backgroundColor: "#fff", borderRadius: 14, padding: 16, marginBottom: 20, borderWidth: 1, borderColor: "#512DA8" }}>
-            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-              <Text style={{ fontSize: 16, fontWeight: "700", color: "#1E1B2E" }}>Editar Monto del Gasto</Text>
+          <View className="bg-card rounded-[14px] p-[16px] mb-[20px] border-[1px] border-primary">
+            <View className="flex-row justify-between items-center mb-[12px]">
+              <Text className="text-[16px] font-bold text-text">
+                Editar Monto del Gasto
+              </Text>
               <TouchableOpacity onPress={() => setIdEditar(null)}>
                 <Feather name="x" size={20} color="#8A849C" />
               </TouchableOpacity>
             </View>
-            <Text style={{ fontSize: 12, fontWeight: "600", color: "#6B6580", marginBottom: 4 }}>Nuevo Monto ($)</Text>
+            <Text className="text-[12px] font-semibold text-text-secondary mb-[4px]">
+              Nuevo Monto ($)
+            </Text>
             <TextInput
               value={montoEditar}
               onChangeText={setMontoEditar}
               keyboardType="numeric"
-              style={{ backgroundColor: "#F5F3FA", borderRadius: 10, paddingHorizontal: 12, height: 44, marginBottom: 16, fontSize: 15, color: "#1E1B2E" }}
+              className="bg-bg rounded-[10px] px-[12px] h-[44px] mb-[16px] text-[15px] text-text"
             />
             <TouchableOpacity
               onPress={guardarEdicionGasto}
-              style={{ backgroundColor: "#512DA8", height: 44, borderRadius: 10, alignItems: "center", justifyContent: "center" }}
+              className="bg-primary h-[44px] rounded-[10px] items-center justify-center"
             >
-              <Text style={{ color: "#fff", fontWeight: "600", fontSize: 14 }}>Guardar Cambios</Text>
+              <Text className="text-card font-semibold text-[14px]">
+                Guardar Cambios
+              </Text>
             </TouchableOpacity>
           </View>
         )}
 
         {/* Lista y Gestión de Gastos */}
-        <View style={{ backgroundColor: "#fff", borderRadius: 14, padding: 14 }}>
-          <Text style={{ fontSize: 16, fontWeight: "700", marginBottom: 15 }}>Gestión de Gastos</Text>
+        <View className="bg-card rounded-[14px] p-[14px]">
+          <Text className="text-[16px] font-bold mb-[15px]">
+            Gestión de Gastos
+          </Text>
           {listaGastos.length === 0 ? (
-            <Text style={{ color: "#6B6580", textAlign: "center", marginVertical: 10 }}>
+            <Text className="text-text-secondary text-center my-[10px]">
               Aún no hay gastos registrados.
             </Text>
           ) : (
             listaGastos.map((gasto) => (
-              <View key={gasto.id} style={{ flexDirection: "row", alignItems: "center", paddingVertical: 12, borderBottomWidth: 1, borderColor: "#F5F3FA" }}>
-                <Text style={{ fontSize: 24, marginRight: 15 }}>{gasto.icono}</Text>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ fontWeight: "bold", color: "#1E1B2E", fontSize: 16 }}>{gasto.categoria}</Text>
-                  <Text style={{ color: "#6B6580", fontSize: 12 }}>ID: {gasto.id}</Text>
+              <View
+                key={gasto.id}
+                className="flex-row items-center py-[12px] border-b-[1px] border-bg"
+              >
+                <Text className="text-[24px] mr-[15px]">{gasto.icono}</Text>
+                <View className="flex-1">
+                  <Text className="font-bold text-text text-[16px]">
+                    {gasto.categoria}
+                  </Text>
+                  <Text className="text-text-secondary text-[12px]">
+                    ID: {gasto.id}
+                  </Text>
                 </View>
-                <Text style={{ fontSize: 16, fontWeight: "700", color: "#C62828", marginRight: 12 }}>
+                <Text className="text-[16px] font-bold text-error mr-[12px]">
                   ${Number(gasto.monto).toLocaleString("es-CL")}
                 </Text>
-                <View style={{ flexDirection: "row", gap: 10 }}>
-                  <TouchableOpacity onPress={() => prepararEdicion(gasto)} style={{ padding: 4 }}>
+                <View className="flex-row gap-[10px]">
+                  <TouchableOpacity
+                    onPress={() => prepararEdicion(gasto)}
+                    className="p-[4px]"
+                  >
                     <Feather name="edit-2" size={18} color="#512DA8" />
                   </TouchableOpacity>
-                  <TouchableOpacity onPress={() => borrarGasto(gasto.id)} style={{ padding: 4 }}>
+                  <TouchableOpacity
+                    onPress={() => borrarGasto(gasto.id)}
+                    className="p-[4px]"
+                  >
                     <Feather name="trash-2" size={18} color="#C62828" />
                   </TouchableOpacity>
                 </View>

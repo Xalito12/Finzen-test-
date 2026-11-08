@@ -16,7 +16,11 @@ import {
 import BottomNav from "../components/BottomNav";
 import { supabase } from "../database/supabase";
 
-export default function ScreenProfile({ onNav }: { onNav: (i: number) => void }) {
+export default function ScreenProfile({
+  onNav,
+}: {
+  onNav: (i: number) => void;
+}) {
   const [nombre, setNombre] = useState("Usuario");
   const [email, setEmail] = useState("");
   const [sueldo, setSueldo] = useState("0");
@@ -55,7 +59,11 @@ export default function ScreenProfile({ onNav }: { onNav: (i: number) => void })
         .single();
 
       if (perfil) {
-        const nom = perfil.nombre || user.user_metadata?.nombre || user.email?.split("@")[0] || "Usuario";
+        const nom =
+          perfil.nombre ||
+          user.user_metadata?.nombre ||
+          user.email?.split("@")[0] ||
+          "Usuario";
         const sue = (perfil.sueldo || 0).toString();
         const dia = (perfil.dia_pago || 1).toString();
 
@@ -67,7 +75,8 @@ export default function ScreenProfile({ onNav }: { onNav: (i: number) => void })
         setEditSueldo(sue);
         setEditDiaPago(dia);
       } else {
-        const nom = user.user_metadata?.nombre || user.email?.split("@")[0] || "Usuario";
+        const nom =
+          user.user_metadata?.nombre || user.email?.split("@")[0] || "Usuario";
         setNombre(nom);
         setEditNombre(nom);
       }
@@ -112,15 +121,13 @@ export default function ScreenProfile({ onNav }: { onNav: (i: number) => void })
       });
 
       // Actualizar fila en la tabla perfiles
-      const { error: errorPerfil } = await supabase
-        .from("perfiles")
-        .upsert({
-          id: user.id,
-          nombre: editNombre.trim(),
-          sueldo: sueldoNum,
-          dia_pago: parseInt(editDiaPago),
-          actualizado_en: new Date().toISOString(),
-        });
+      const { error: errorPerfil } = await supabase.from("perfiles").upsert({
+        id: user.id,
+        nombre: editNombre.trim(),
+        sueldo: sueldoNum,
+        dia_pago: parseInt(editDiaPago),
+        actualizado_en: new Date().toISOString(),
+      });
 
       if (errorPerfil) {
         Alert.alert("Error al actualizar", errorPerfil.message);
@@ -156,13 +163,11 @@ export default function ScreenProfile({ onNav }: { onNav: (i: number) => void })
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: "#F5F3FA" }}>
+    <View className="flex-1 bg-bg">
       <ScrollView contentContainerStyle={{ padding: 24, paddingBottom: 110 }}>
         {/* Cabecera */}
-        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-          <Text style={{ fontSize: 24, fontWeight: "700", color: "#1E1B2E" }}>
-            Mi Perfil
-          </Text>
+        <View className="flex-row justify-between items-center mb-[20px]">
+          <Text className="text-[24px] font-bold text-text">Mi Perfil</Text>
           <TouchableOpacity
             onPress={() => {
               setEditNombre(nombre);
@@ -170,43 +175,19 @@ export default function ScreenProfile({ onNav }: { onNav: (i: number) => void })
               setEditDiaPago(diaPago);
               setModalVisible(true);
             }}
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              backgroundColor: "#E8E4F0",
-              paddingHorizontal: 12,
-              paddingVertical: 6,
-              borderRadius: 20,
-              gap: 6,
-            }}
+            className="flex-row items-center bg-border px-[12px] py-[6px] rounded-[20px] gap-[6px]"
           >
             <Feather name="edit-3" size={14} color="#512DA8" />
-            <Text style={{ color: "#512DA8", fontWeight: "700", fontSize: 13 }}>Editar</Text>
+            <Text className="text-primary font-bold text-[13px]">Editar</Text>
           </TouchableOpacity>
         </View>
 
         {/* Tarjeta de Usuario */}
         <View
-          style={{
-            backgroundColor: "#fff",
-            borderRadius: 16,
-            padding: 20,
-            alignItems: "center",
-            marginBottom: 20,
-            elevation: 2,
-          }}
+          className="bg-card rounded-[16px] p-[20px] items-center mb-[20px]"
+          style={{ elevation: 2 }}
         >
-          <View
-            style={{
-              width: 72,
-              height: 72,
-              borderRadius: 36,
-              backgroundColor: "#512DA8",
-              alignItems: "center",
-              justifyContent: "center",
-              marginBottom: 12,
-            }}
-          >
+          <View className="w-[72px] h-[72px] rounded-[36px] bg-primary items-center justify-center mb-[12px]">
             <Feather name="user" size={36} color="#fff" />
           </View>
 
@@ -214,10 +195,8 @@ export default function ScreenProfile({ onNav }: { onNav: (i: number) => void })
             <ActivityIndicator color="#512DA8" />
           ) : (
             <>
-              <Text style={{ fontSize: 20, fontWeight: "700", color: "#1E1B2E" }}>
-                {nombre}
-              </Text>
-              <Text style={{ fontSize: 13, color: "#6B6580", marginTop: 4 }}>
+              <Text className="text-[20px] font-bold text-text">{nombre}</Text>
+              <Text className="text-[13px] text-text-secondary mt-[4px]">
                 {email || "Sin correo"}
               </Text>
             </>
@@ -226,54 +205,33 @@ export default function ScreenProfile({ onNav }: { onNav: (i: number) => void })
 
         {/* Información Financiera */}
         <View
-          style={{
-            backgroundColor: "#fff",
-            borderRadius: 16,
-            padding: 16,
-            marginBottom: 24,
-            elevation: 2,
-          }}
+          className="bg-card rounded-[16px] p-[16px] mb-[24px]"
+          style={{ elevation: 2 }}
         >
-          <Text style={{ fontSize: 12, fontWeight: "700", color: "#6B6580", marginBottom: 12 }}>
+          <Text className="text-[12px] font-bold text-text-secondary mb-[12px]">
             INFORMACIÓN FINANCIERA
           </Text>
 
-          <View
-            style={{
-              flexDirection: "row",
-              justifyContent: "space-between",
-              alignItems: "center",
-              paddingVertical: 10,
-              borderBottomWidth: 1,
-              borderColor: "#F5F3FA",
-            }}
-          >
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+          <View className="flex-row justify-between items-center py-[10px] border-b-[1px] border-bg">
+            <View className="flex-row items-center gap-[10px]">
               <Feather name="dollar-sign" size={18} color="#512DA8" />
-              <Text style={{ fontSize: 15, color: "#1E1B2E", fontWeight: "500" }}>
+              <Text className="text-[15px] text-text font-medium">
                 Sueldo Mensual
               </Text>
             </View>
-            <Text style={{ fontSize: 15, fontWeight: "700", color: "#512DA8" }}>
+            <Text className="text-[15px] font-bold text-primary">
               ${parseInt(sueldo || "0").toLocaleString("es-CL")} CLP
             </Text>
           </View>
 
-          <View
-            style={{
-              flexDirection: "row",
-              justifyContent: "space-between",
-              alignItems: "center",
-              paddingVertical: 10,
-            }}
-          >
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+          <View className="flex-row justify-between items-center py-[10px]">
+            <View className="flex-row items-center gap-[10px]">
               <Feather name="calendar" size={18} color="#512DA8" />
-              <Text style={{ fontSize: 15, color: "#1E1B2E", fontWeight: "500" }}>
+              <Text className="text-[15px] text-text font-medium">
                 Día de Pago
               </Text>
             </View>
-            <Text style={{ fontSize: 15, fontWeight: "700", color: "#512DA8" }}>
+            <Text className="text-[15px] font-bold text-primary">
               Día {diaPago} de cada mes
             </Text>
           </View>
@@ -282,18 +240,10 @@ export default function ScreenProfile({ onNav }: { onNav: (i: number) => void })
         {/* Cerrar Sesión */}
         <TouchableOpacity
           onPress={handleCerrarSesion}
-          style={{
-            flexDirection: "row",
-            alignItems: "center",
-            justifyContent: "center",
-            backgroundColor: "#FEE2E2",
-            paddingVertical: 14,
-            borderRadius: 12,
-            gap: 8,
-          }}
+          className="flex-row items-center justify-center bg-[#FEE2E2] py-[14px] rounded-[12px] gap-[8px]"
         >
           <Feather name="log-out" size={18} color="#C62828" />
-          <Text style={{ color: "#C62828", fontWeight: "700", fontSize: 15 }}>
+          <Text className="text-error font-bold text-[15px]">
             Cerrar Sesión
           </Text>
         </TouchableOpacity>
@@ -303,23 +253,12 @@ export default function ScreenProfile({ onNav }: { onNav: (i: number) => void })
       <Modal visible={modalVisible} animationType="slide" transparent>
         <KeyboardAvoidingView
           behavior={Platform.OS === "ios" ? "padding" : "height"}
-          style={{
-            flex: 1,
-            backgroundColor: "rgba(0,0,0,0.5)",
-            justifyContent: "flex-end",
-          }}
+          className="flex-1 justify-end"
+          style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
         >
-          <View
-            style={{
-              backgroundColor: "#fff",
-              borderTopLeftRadius: 24,
-              borderTopRightRadius: 24,
-              padding: 24,
-              maxHeight: "85%",
-            }}
-          >
-            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-              <Text style={{ fontSize: 18, fontWeight: "700", color: "#1E1B2E" }}>
+          <View className="bg-card rounded-tl-[24px] rounded-tr-[24px] p-[24px] max-h-[85%]">
+            <View className="flex-row justify-between items-center mb-[20px]">
+              <Text className="text-[18px] font-bold text-text">
                 Editar Perfil
               </Text>
               <TouchableOpacity onPress={() => setModalVisible(false)}>
@@ -329,63 +268,44 @@ export default function ScreenProfile({ onNav }: { onNav: (i: number) => void })
 
             <ScrollView showsVerticalScrollIndicator={false}>
               {/* Campo Nombre */}
-              <Text style={{ fontSize: 12, fontWeight: "600", color: "#6B6580", marginBottom: 6 }}>
+              <Text className="text-[12px] font-semibold text-text-secondary mb-[6px]">
                 NOMBRE
               </Text>
               <TextInput
                 value={editNombre}
                 onChangeText={setEditNombre}
-                style={{
-                  backgroundColor: "#F5F3FA",
-                  borderRadius: 12,
-                  paddingHorizontal: 14,
-                  height: 48,
-                  fontSize: 15,
-                  color: "#1E1B2E",
-                  marginBottom: 16,
-                }}
+                className="bg-bg rounded-[12px] px-[14px] h-[48px] text-[15px] text-text mb-[16px]"
               />
 
               {/* Campo Sueldo */}
-              <Text style={{ fontSize: 12, fontWeight: "600", color: "#6B6580", marginBottom: 6 }}>
+              <Text className="text-[12px] font-semibold text-text-secondary mb-[6px]">
                 SUELDO MENSUAL (CLP)
               </Text>
               <TextInput
                 value={editSueldo}
                 onChangeText={setEditSueldo}
                 keyboardType="numeric"
-                style={{
-                  backgroundColor: "#F5F3FA",
-                  borderRadius: 12,
-                  paddingHorizontal: 14,
-                  height: 48,
-                  fontSize: 15,
-                  color: "#1E1B2E",
-                  marginBottom: 16,
-                }}
+                className="bg-bg rounded-[12px] px-[14px] h-[48px] text-[15px] text-text mb-[16px]"
               />
 
               {/* Selector Día de Pago */}
-              <Text style={{ fontSize: 12, fontWeight: "600", color: "#6B6580", marginBottom: 8 }}>
+              <Text className="text-[12px] font-semibold text-text-secondary mb-[8px]">
                 DÍA DE PAGO
               </Text>
-              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 24 }}>
+              <View className="flex-row flex-wrap gap-[8px] mb-[24px]">
                 {dias.map((d) => {
                   const sel = parseInt(editDiaPago) === d;
                   return (
                     <TouchableOpacity
                       key={d}
                       onPress={() => setEditDiaPago(d.toString())}
-                      style={{
-                        width: 44,
-                        height: 44,
-                        borderRadius: 10,
-                        backgroundColor: sel ? "#512DA8" : "#F5F3FA",
-                        alignItems: "center",
-                        justifyContent: "center",
-                      }}
+                      className="w-[44px] h-[44px] rounded-[10px] items-center justify-center"
+                      style={{ backgroundColor: sel ? "#512DA8" : "#F5F3FA" }}
                     >
-                      <Text style={{ color: sel ? "#fff" : "#1E1B2E", fontWeight: "700" }}>
+                      <Text
+                        className="font-bold"
+                        style={{ color: sel ? "#fff" : "#1E1B2E" }}
+                      >
                         {d}
                       </Text>
                     </TouchableOpacity>
@@ -397,19 +317,12 @@ export default function ScreenProfile({ onNav }: { onNav: (i: number) => void })
               <TouchableOpacity
                 onPress={handleGuardarCambios}
                 disabled={guardando}
-                style={{
-                  backgroundColor: "#512DA8",
-                  paddingVertical: 14,
-                  borderRadius: 12,
-                  alignItems: "center",
-                  justifyContent: "center",
-                  marginBottom: 10,
-                }}
+                className="bg-primary py-[14px] rounded-[12px] items-center justify-center mb-[10px]"
               >
                 {guardando ? (
                   <ActivityIndicator color="#fff" />
                 ) : (
-                  <Text style={{ color: "#fff", fontWeight: "700", fontSize: 15 }}>
+                  <Text className="text-card font-bold text-[15px]">
                     Guardar Cambios
                   </Text>
                 )}

@@ -19,158 +19,169 @@ export default function ScreenSalarySetup({ onNext }: { onNext: () => void }) {
 
   const dias = [1, 5, 7, 10, 14, 15, 28, 30];
 
-const handleGuardarConfiguracion = async () => {
-  const montoLimpio = parseInt(sueldo.replace(/[^0-9]/g, ""));
+  const handleGuardarConfiguracion = async () => {
+    const montoLimpio = parseInt(sueldo.replace(/[^0-9]/g, ""));
 
-  if (isNaN(montoLimpio) || montoLimpio <= 0) {
-    Alert.alert("Atención", "Por favor ingresa un sueldo válido.");
-    return;
-  }
-
-  // Obtener usuario autenticado
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) {
-    Alert.alert("Error", "Sesión no encontrada.");
-    return;
-  }
-
-  // Las categorías iniciales pertenecen a la configuración inicial, no a la lectura.
-  const { data: perfil, error: errorPerfil } = await supabase
-    .from("perfiles").select("sueldo").eq("id", user.id).single();
-  if (errorPerfil) {
-    Alert.alert("Error al cargar configuración", errorPerfil.message);
-    return;
-  }
-  if (!perfil.sueldo || Number(perfil.sueldo) <= 0) {
-    const { data: existentes, error: errorCategorias } = await supabase
-      .from("categorias").select("id").eq("usuario_id", user.id).limit(1);
-    if (errorCategorias) {
-      Alert.alert("Error al cargar categorías", errorCategorias.message);
+    if (isNaN(montoLimpio) || montoLimpio <= 0) {
+      Alert.alert("Atención", "Por favor ingresa un sueldo válido.");
       return;
     }
-    if (existentes.length === 0) {
-      const { error: errorIniciales } = await supabase.from("categorias").insert([
-        { usuario_id: user.id, nombre: "Alimentación", icono: "🍔", limite: 160000, color: "#7E57C2" },
-        { usuario_id: user.id, nombre: "Transporte", icono: "🚗", limite: 80000, color: "#F9A825" },
-        { usuario_id: user.id, nombre: "Compras", icono: "🛍️", limite: 130000, color: "#C62828" },
-        { usuario_id: user.id, nombre: "Salud", icono: "❤️", limite: 55000, color: "#2E7D32" },
-      ]);
-      if (errorIniciales) {
-        Alert.alert("Error al crear categorías", errorIniciales.message);
+
+    // Obtener usuario autenticado
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) {
+      Alert.alert("Error", "Sesión no encontrada.");
+      return;
+    }
+
+    // Las categorías iniciales pertenecen a la configuración inicial, no a la lectura.
+    const { data: perfil, error: errorPerfil } = await supabase
+      .from("perfiles")
+      .select("sueldo")
+      .eq("id", user.id)
+      .single();
+    if (errorPerfil) {
+      Alert.alert("Error al cargar configuración", errorPerfil.message);
+      return;
+    }
+    if (!perfil.sueldo || Number(perfil.sueldo) <= 0) {
+      const { data: existentes, error: errorCategorias } = await supabase
+        .from("categorias")
+        .select("id")
+        .eq("usuario_id", user.id)
+        .limit(1);
+      if (errorCategorias) {
+        Alert.alert("Error al cargar categorías", errorCategorias.message);
         return;
       }
+      if (existentes.length === 0) {
+        const { error: errorIniciales } = await supabase
+          .from("categorias")
+          .insert([
+            {
+              usuario_id: user.id,
+              nombre: "Alimentación",
+              icono: "🍔",
+              limite: 160000,
+              color: "#7E57C2",
+            },
+            {
+              usuario_id: user.id,
+              nombre: "Transporte",
+              icono: "🚗",
+              limite: 80000,
+              color: "#F9A825",
+            },
+            {
+              usuario_id: user.id,
+              nombre: "Compras",
+              icono: "🛍️",
+              limite: 130000,
+              color: "#C62828",
+            },
+            {
+              usuario_id: user.id,
+              nombre: "Salud",
+              icono: "❤️",
+              limite: 55000,
+              color: "#2E7D32",
+            },
+          ]);
+        if (errorIniciales) {
+          Alert.alert("Error al crear categorías", errorIniciales.message);
+          return;
+        }
+      }
     }
-  }
 
-  // Actualizar en Supabase
-  const { error } = await supabase
-    .from("perfiles")
-    .update({
-      sueldo: montoLimpio,
-      dia_pago: diaPago,
-    })
-    .eq("id", user.id);
+    // Actualizar en Supabase
+    const { error } = await supabase
+      .from("perfiles")
+      .update({
+        sueldo: montoLimpio,
+        dia_pago: diaPago,
+      })
+      .eq("id", user.id);
 
-  if (error) {
-    Alert.alert("Error al guardar", error.message);
-    return;
-  }
+    if (error) {
+      Alert.alert("Error al guardar", error.message);
+      return;
+    }
 
-  onNext(); // Lleva al Dashboard (pantalla 2)
-};
+    onNext(); // Lleva al Dashboard (pantalla 2)
+  };
 
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === "ios" ? "padding" : "height"}
-      style={{ flex: 1, backgroundColor: "#F5F3FA" }}
+      className="flex-1 bg-bg"
     >
-      <ScrollView contentContainerStyle={{ flexGrow: 1, padding: 24, justifyContent: "space-between" }}>
+      <ScrollView
+        contentContainerStyle={{
+          flexGrow: 1,
+          padding: 24,
+          justifyContent: "space-between",
+        }}
+      >
         <View>
           {/* Encabezado con Icono */}
-          <View
-            style={{
-              width: 44,
-              height: 44,
-              borderRadius: 12,
-              backgroundColor: "#E8E4F0",
-              alignItems: "center",
-              justifyContent: "center",
-              marginBottom: 20,
-              marginTop: 10,
-            }}
-          >
+          <View className="w-[44px] h-[44px] rounded-[12px] bg-border items-center justify-center mb-[20px] mt-[10px]">
             <Feather name="credit-card" size={22} color="#512DA8" />
           </View>
 
-          <Text style={{ fontSize: 13, color: "#6B6580", fontWeight: "600", marginBottom: 4 }}>
+          <Text className="text-[13px] text-text-secondary font-semibold mb-[4px]">
             Paso 1 de 2
           </Text>
-          <Text style={{ fontSize: 26, fontWeight: "800", color: "#1E1B2E", marginBottom: 12 }}>
+          <Text className="text-[26px] font-extrabold text-text mb-[12px]">
             Configura tu sueldo mensual
           </Text>
 
           {/* Barra de progreso */}
-          <View style={{ height: 6, backgroundColor: "#E8E4F0", borderRadius: 99, marginBottom: 30, overflow: "hidden" }}>
-            <View style={{ width: "50%", height: "100%", backgroundColor: "#512DA8", borderRadius: 99 }} />
+          <View className="h-[6px] bg-border rounded-[99px] mb-[30px] overflow-hidden">
+            <View className="w-[50%] h-[100%] bg-primary rounded-[99px]" />
           </View>
 
           {/* Input Sueldo */}
-          <Text style={{ fontSize: 13, fontWeight: "600", color: "#6B6580", marginBottom: 8 }}>
+          <Text className="text-[13px] font-semibold text-text-secondary mb-[8px]">
             Sueldo mensual neto (CLP)
           </Text>
-          <View
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              backgroundColor: "#fff",
-              borderRadius: 14,
-              borderWidth: 2,
-              borderColor: "#512DA8",
-              paddingHorizontal: 16,
-              height: 56,
-              marginBottom: 28,
-            }}
-          >
-            <Text style={{ fontSize: 20, fontWeight: "700", color: "#512DA8", marginRight: 4 }}>$</Text>
+          <View className="flex-row items-center bg-card rounded-[14px] border-[2px] border-primary px-[16px] h-[56px] mb-[28px]">
+            <Text className="text-[20px] font-bold text-primary mr-[4px]">
+              $
+            </Text>
             <TextInput
               value={sueldo}
               onChangeText={setSueldo}
               keyboardType="numeric"
               placeholder="0"
               placeholderTextColor="#8A849C"
-              style={{ flex: 1, fontSize: 20, fontWeight: "700", color: "#1E1B2E" }}
+              className="flex-1 text-[20px] font-bold text-text"
             />
-            <Text style={{ fontSize: 14, color: "#8A849C", fontWeight: "600" }}>CLP</Text>
+            <Text className="text-[14px] text-muted font-semibold">CLP</Text>
           </View>
 
           {/* Selector de Día de Pago */}
-          <Text style={{ fontSize: 13, fontWeight: "600", color: "#6B6580", marginBottom: 12 }}>
+          <Text className="text-[13px] font-semibold text-text-secondary mb-[12px]">
             Día de pago
           </Text>
-          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10, marginBottom: 30 }}>
+          <View className="flex-row flex-wrap gap-[10px] mb-[30px]">
             {dias.map((d) => {
               const seleccionado = diaPago === d;
               return (
                 <TouchableOpacity
                   key={d}
                   onPress={() => setDiaPago(d)}
+                  className="w-[52px] h-[52px] rounded-[12px] items-center justify-center border-border"
                   style={{
-                    width: 52,
-                    height: 52,
-                    borderRadius: 12,
                     backgroundColor: seleccionado ? "#512DA8" : "#fff",
-                    alignItems: "center",
-                    justifyContent: "center",
                     borderWidth: seleccionado ? 0 : 1,
-                    borderColor: "#E8E4F0",
                   }}
                 >
                   <Text
-                    style={{
-                      fontSize: 15,
-                      fontWeight: "700",
-                      color: seleccionado ? "#fff" : "#1E1B2E",
-                    }}
+                    className="text-[15px] font-bold"
+                    style={{ color: seleccionado ? "#fff" : "#1E1B2E" }}
                   >
                     {d}
                   </Text>
@@ -183,18 +194,9 @@ const handleGuardarConfiguracion = async () => {
         {/* Botón Continuar */}
         <TouchableOpacity
           onPress={handleGuardarConfiguracion}
-          style={{
-            backgroundColor: "#512DA8",
-            height: 52,
-            borderRadius: 14,
-            alignItems: "center",
-            justifyContent: "center",
-            marginBottom: 10,
-          }}
+          className="bg-primary h-[52px] rounded-[14px] items-center justify-center mb-[10px]"
         >
-          <Text style={{ color: "#fff", fontWeight: "700", fontSize: 16 }}>
-            Continuar →
-          </Text>
+          <Text className="text-card font-bold text-[16px]">Continuar →</Text>
         </TouchableOpacity>
       </ScrollView>
     </KeyboardAvoidingView>

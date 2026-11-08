@@ -1,20 +1,19 @@
 import React from "react";
 import { Text, View } from "react-native";
 
-export default function MiniBadge({ percent, color }: { percent: number; color: string }) {
+export default function MiniBadge({
+  percent,
+  color,
+}: {
+  percent: number;
+  color: string;
+}) {
   return (
     <View
-      style={{
-        width: 60,
-        height: 60,
-        borderRadius: 30,
-        borderWidth: 5,
-        borderColor: color,
-        alignItems: "center",
-        justifyContent: "center",
-      }}
+      className="w-[60px] h-[60px] rounded-[30px] border-[5px] items-center justify-center"
+      style={{ borderColor: color }}
     >
-      <Text style={{ fontSize: 13, fontWeight: "700", color: "#fff" }}>{percent}%</Text>
+      <Text className="text-[13px] font-bold text-card">{percent}%</Text>
     </View>
   );
 }

@@ -39,7 +39,10 @@ export default function ScreenLogin({ onNav }: { onNav: (i: number) => void }) {
 
       if (data.session) {
         const { data: perfil, error: errorPerfil } = await supabase
-          .from("perfiles").select("sueldo").eq("id", data.session.user.id).single();
+          .from("perfiles")
+          .select("sueldo")
+          .eq("id", data.session.user.id)
+          .single();
         if (errorPerfil) throw errorPerfil;
         onNav(Number(perfil.sueldo) > 0 ? 2 : 1);
       }
@@ -53,44 +56,36 @@ export default function ScreenLogin({ onNav }: { onNav: (i: number) => void }) {
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === "ios" ? "padding" : "height"}
-      style={{ flex: 1, backgroundColor: "#F5F3FA" }}
+      className="flex-1 bg-bg"
     >
-      <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: "center", padding: 24 }}>
-        <View style={{ alignItems: "center", marginBottom: 32 }}>
-          <View
-            style={{
-              width: 64,
-              height: 64,
-              borderRadius: 32,
-              backgroundColor: "#512DA8",
-              alignItems: "center",
-              justifyContent: "center",
-              marginBottom: 16,
-            }}
-          >
+      <ScrollView
+        contentContainerStyle={{
+          flexGrow: 1,
+          justifyContent: "center",
+          padding: 24,
+        }}
+      >
+        <View className="items-center mb-[32px]">
+          <View className="w-[64px] h-[64px] rounded-[32px] bg-primary items-center justify-center mb-[16px]">
             <Feather name="log-in" size={30} color="#fff" />
           </View>
-          <Text style={{ fontSize: 24, fontWeight: "700", color: "#1E1B2E" }}>Iniciar Sesión</Text>
-          <Text style={{ fontSize: 14, color: "#6B6580", marginTop: 4 }}>
+          <Text className="text-[24px] font-bold text-text">
+            Iniciar Sesión
+          </Text>
+          <Text className="text-[14px] text-text-secondary mt-[4px]">
             Bienvenido de nuevo a FinZen
           </Text>
         </View>
 
-        <View style={{ backgroundColor: "#fff", borderRadius: 16, padding: 20, elevation: 2 }}>
+        <View
+          className="bg-card rounded-[16px] p-[20px]"
+          style={{ elevation: 2 }}
+        >
           {/* Correo */}
-          <Text style={{ fontSize: 12, fontWeight: "600", color: "#6B6580", marginBottom: 6 }}>
+          <Text className="text-[12px] font-semibold text-text-secondary mb-[6px]">
             CORREO ELECTRÓNICO
           </Text>
-          <View
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              backgroundColor: "#F5F3FA",
-              borderRadius: 12,
-              paddingHorizontal: 12,
-              marginBottom: 16,
-            }}
-          >
+          <View className="flex-row items-center bg-bg rounded-[12px] px-[12px] mb-[16px]">
             <Feather name="mail" size={18} color="#8A849C" />
             <TextInput
               placeholder="ejemplo@correo.com"
@@ -99,24 +94,15 @@ export default function ScreenLogin({ onNav }: { onNav: (i: number) => void }) {
               onChangeText={setEmail}
               keyboardType="email-address"
               autoCapitalize="none"
-              style={{ flex: 1, paddingVertical: 12, paddingHorizontal: 10, color: "#1E1B2E" }}
+              className="flex-1 py-[12px] px-[10px] text-text"
             />
           </View>
 
           {/* Contraseña */}
-          <Text style={{ fontSize: 12, fontWeight: "600", color: "#6B6580", marginBottom: 6 }}>
+          <Text className="text-[12px] font-semibold text-text-secondary mb-[6px]">
             CONTRASEÑA
           </Text>
-          <View
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              backgroundColor: "#F5F3FA",
-              borderRadius: 12,
-              paddingHorizontal: 12,
-              marginBottom: 24,
-            }}
-          >
+          <View className="flex-row items-center bg-bg rounded-[12px] px-[12px] mb-[24px]">
             <Feather name="lock" size={18} color="#8A849C" />
             <TextInput
               placeholder="Tu contraseña"
@@ -124,10 +110,14 @@ export default function ScreenLogin({ onNav }: { onNav: (i: number) => void }) {
               value={password}
               onChangeText={setPassword}
               secureTextEntry={!verPassword}
-              style={{ flex: 1, paddingVertical: 12, paddingHorizontal: 10, color: "#1E1B2E" }}
+              className="flex-1 py-[12px] px-[10px] text-text"
             />
             <TouchableOpacity onPress={() => setVerPassword(!verPassword)}>
-              <Feather name={verPassword ? "eye" : "eye-off"} size={18} color="#8A849C" />
+              <Feather
+                name={verPassword ? "eye" : "eye-off"}
+                size={18}
+                color="#8A849C"
+              />
             </TouchableOpacity>
           </View>
 
@@ -135,18 +125,12 @@ export default function ScreenLogin({ onNav }: { onNav: (i: number) => void }) {
           <TouchableOpacity
             onPress={handleLogin}
             disabled={cargando}
-            style={{
-              backgroundColor: "#512DA8",
-              paddingVertical: 14,
-              borderRadius: 12,
-              alignItems: "center",
-              justifyContent: "center",
-            }}
+            className="bg-primary py-[14px] rounded-[12px] items-center justify-center"
           >
             {cargando ? (
               <ActivityIndicator color="#fff" />
             ) : (
-              <Text style={{ color: "#fff", fontWeight: "700", fontSize: 15 }}>Entrar</Text>
+              <Text className="text-card font-bold text-[15px]">Entrar</Text>
             )}
           </TouchableOpacity>
         </View>
@@ -154,19 +138,20 @@ export default function ScreenLogin({ onNav }: { onNav: (i: number) => void }) {
         {/* Enlace para registrarse si no tiene cuenta */}
         <TouchableOpacity
           onPress={() => onNav(9)}
-          style={{ marginTop: 20, alignItems: "center" }}
+          className="mt-[20px] items-center"
         >
-          <Text style={{ color: "#6B6580", fontSize: 14 }}>
-            ¿No tienes cuenta? <Text style={{ color: "#512DA8", fontWeight: "700" }}>Regístrate</Text>
+          <Text className="text-text-secondary text-[14px]">
+            ¿No tienes cuenta?{" "}
+            <Text className="text-primary font-bold">Regístrate</Text>
           </Text>
         </TouchableOpacity>
 
         {/* Volver al Onboarding */}
         <TouchableOpacity
           onPress={() => onNav(0)}
-          style={{ marginTop: 12, alignItems: "center" }}
+          className="mt-[12px] items-center"
         >
-          <Text style={{ color: "#8A849C", fontSize: 13 }}>Volver al Inicio</Text>
+          <Text className="text-muted text-[13px]">Volver al Inicio</Text>
         </TouchableOpacity>
       </ScrollView>
     </KeyboardAvoidingView>

@@ -17,11 +17,13 @@ import ScreenSavingsGoals from "../screens/ScreenSavingsGoals";
 
 export default function App() {
   const [screen, setScreen] = useState<number | null>(null);
+  const [usuarioInicio, setUsuarioInicio] = useState<string | null>(null);
 
   useEffect(() => {
     // 1. Al abrir la app por primera vez:
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (session?.user) {
+        setUsuarioInicio(session.user.id);
         const { data: perfil } = await supabase
           .from("perfiles")
           .select("sueldo")
@@ -41,8 +43,12 @@ export default function App() {
     // 2. Escucha si el usuario cierra sesión (logout)
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((event) => {
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "SIGNED_IN" && session?.user) {
+        setUsuarioInicio(session.user.id);
+      }
       if (event === "SIGNED_OUT") {
+        setUsuarioInicio(null);
         setScreen(0);
       }
     });
@@ -64,7 +70,7 @@ export default function App() {
       case 1:
         return <ScreenSalarySetup onNext={() => setScreen(2)} />;
       case 2:
-        return <ScreenDashboard onNav={setScreen} />;
+        return null;
       case 3:
         return <ScreenCategories onNav={setScreen} />;
       case 4:
@@ -82,20 +88,13 @@ export default function App() {
       case 10:
         return <ScreenLogin onNav={setScreen} />;
       default:
-        return <ScreenDashboard onNav={setScreen} />;
+        return null;
     }
   };
 
   if (screen === null) {
     return (
-      <View
-        style={{
-          flex: 1,
-          backgroundColor: "#F5F3FA",
-          justifyContent: "center",
-          alignItems: "center",
-        }}
-      >
+      <View className="flex-1 bg-bg justify-center items-center">
         <ActivityIndicator size="large" color="#512DA8" />
       </View>
     );
@@ -103,8 +102,17 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-      <View style={{ flex: 1, backgroundColor: "#F5F3FA" }}>
+      <View className="flex-1 bg-bg">
         <StatusBar barStyle="light-content" />
+        {usuarioInicio && screen >= 2 && screen <= 8 && (
+          <View style={{ flex: 1, display: screen === 2 ? "flex" : "none" }}>
+            <ScreenDashboard
+              key={usuarioInicio}
+              active={screen === 2}
+              onNav={setScreen}
+            />
+          </View>
+        )}
         {renderScreen()}
       </View>
     </SafeAreaProvider>
