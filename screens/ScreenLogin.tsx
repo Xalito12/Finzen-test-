@@ -1,15 +1,15 @@
 import { Feather } from "@expo/vector-icons";
 import React, { useState } from "react";
 import {
-    ActivityIndicator,
-    Alert,
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { supabase } from "../database/supabase";
 
@@ -38,8 +38,10 @@ export default function ScreenLogin({ onNav }: { onNav: (i: number) => void }) {
       }
 
       if (data.session) {
-        // Redirige directo al Dashboard (2)
-        onNav(2);
+        const { data: perfil, error: errorPerfil } = await supabase
+          .from("perfiles").select("sueldo").eq("id", data.session.user.id).single();
+        if (errorPerfil) throw errorPerfil;
+        onNav(Number(perfil.sueldo) > 0 ? 2 : 1);
       }
     } catch (err: any) {
       Alert.alert("Error inesperado", err.message || "Ocurrió un error.");

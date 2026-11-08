@@ -34,6 +34,34 @@ const handleGuardarConfiguracion = async () => {
     return;
   }
 
+  // Las categorías iniciales pertenecen a la configuración inicial, no a la lectura.
+  const { data: perfil, error: errorPerfil } = await supabase
+    .from("perfiles").select("sueldo").eq("id", user.id).single();
+  if (errorPerfil) {
+    Alert.alert("Error al cargar configuración", errorPerfil.message);
+    return;
+  }
+  if (!perfil.sueldo || Number(perfil.sueldo) <= 0) {
+    const { data: existentes, error: errorCategorias } = await supabase
+      .from("categorias").select("id").eq("usuario_id", user.id).limit(1);
+    if (errorCategorias) {
+      Alert.alert("Error al cargar categorías", errorCategorias.message);
+      return;
+    }
+    if (existentes.length === 0) {
+      const { error: errorIniciales } = await supabase.from("categorias").insert([
+        { usuario_id: user.id, nombre: "Alimentación", icono: "🍔", limite: 160000, color: "#7E57C2" },
+        { usuario_id: user.id, nombre: "Transporte", icono: "🚗", limite: 80000, color: "#F9A825" },
+        { usuario_id: user.id, nombre: "Compras", icono: "🛍️", limite: 130000, color: "#C62828" },
+        { usuario_id: user.id, nombre: "Salud", icono: "❤️", limite: 55000, color: "#2E7D32" },
+      ]);
+      if (errorIniciales) {
+        Alert.alert("Error al crear categorías", errorIniciales.message);
+        return;
+      }
+    }
+  }
+
   // Actualizar en Supabase
   const { error } = await supabase
     .from("perfiles")

@@ -1,8 +1,9 @@
 // screens/ScreenCategories.tsx
 import { Feather } from "@expo/vector-icons";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   Alert,
+  Modal,
   ScrollView,
   Text,
   TextInput,
@@ -12,7 +13,23 @@ import {
 import BottomNav from "../components/BottomNav";
 import { supabase } from "../database/supabase";
 
+const categoriasSugeridas = [
+  { nombre: "Alimentación", icono: "🍔", limite: 160000, color: "#7E57C2" },
+  { nombre: "Transporte", icono: "🚗", limite: 80000, color: "#F9A825" },
+  { nombre: "Compras", icono: "🛍️", limite: 130000, color: "#C62828" },
+  { nombre: "Salud", icono: "❤️", limite: 55000, color: "#2E7D32" },
+  { nombre: "Vivienda", icono: "🏠", limite: 380000, color: "#512DA8" },
+  { nombre: "Servicios", icono: "💡", limite: 100000, color: "#F9A825" },
+  { nombre: "Educación", icono: "📚", limite: 100000, color: "#3F51B5" },
+  { nombre: "Mascotas", icono: "🐾", limite: 50000, color: "#2E7D32" },
+  { nombre: "Entretenimiento", icono: "🎬", limite: 60000, color: "#7E57C2" },
+  { nombre: "Ropa", icono: "👕", limite: 70000, color: "#C62828" },
+];
+
 export default function ScreenCategories({ onNav }: { onNav: (i: number) => void }) {
+  const [mostrarSugerencias, setMostrarSugerencias] = useState(false);
+  const [agregando, setAgregando] = useState(false);
+  const agregandoRef = useRef(false);
   const [listaCategorias, setListaCategorias] = useState<any[]>([]);
   const [enAlerta, setEnAlerta] = useState(0);
   const [sobrepasadas, setSobrepasadas] = useState(0);
@@ -36,28 +53,13 @@ export default function ScreenCategories({ onNav }: { onNav: (i: number) => void
       }
 
       // Obtener categorías del usuario
-      let { data: categoriasDB, error: errCat } = await supabase
+      const { data: categoriasDB, error: errCat } = await supabase
         .from("categorias")
         .select("*")
         .eq("usuario_id", user.id)
         .order("id", { ascending: true });
 
-      // Si no tiene categorías, insertar las iniciales asociadas a su usuario_id
-      if (!categoriasDB || categoriasDB.length === 0) {
-        const categoriasBase = [
-          { usuario_id: user.id, nombre: "Alimentación", icono: "🍔", limite: 160000, color: "#7E57C2" },
-          { usuario_id: user.id, nombre: "Transporte", icono: "🚗", limite: 80000, color: "#F9A825" },
-          { usuario_id: user.id, nombre: "Compras", icono: "🛍️", limite: 130000, color: "#C62828" },
-          { usuario_id: user.id, nombre: "Salud", icono: "❤️", limite: 55000, color: "#2E7D32" },
-        ];
-
-        const { data: insertadas } = await supabase
-          .from("categorias")
-          .insert(categoriasBase)
-          .select();
-
-        categoriasDB = insertadas || [];
-      }
+      if (errCat) throw errCat;
 
       // Obtener gastos de este usuario
       const { data: gastosDB } = await supabase
@@ -173,6 +175,40 @@ export default function ScreenCategories({ onNav }: { onNav: (i: number) => void
     }
   };
 
+  const agregarSugerida = async (categoria: typeof categoriasSugeridas[number]) => {
+    if (agregandoRef.current) return;
+    agregandoRef.current = true;
+    setAgregando(true);
+    try {
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError) throw authError;
+      if (!user) throw new Error("No hay sesión activa.");
+      const { data: existentes, error: errorConsulta } = await supabase
+        .from("categorias").select("nombre").eq("usuario_id", user.id);
+      if (errorConsulta) throw errorConsulta;
+      if (!(existentes || []).some(c => c.nombre.trim().toLowerCase() === categoria.nombre.toLowerCase())) {
+        const { error } = await supabase.from("categorias").insert({ ...categoria, usuario_id: user.id });
+        if (error) throw error;
+      }
+      await cargarCategorias();
+      setMostrarSugerencias(false);
+    } catch (error: any) {
+      Alert.alert("Error al agregar categoría", error.message);
+    } finally {
+      agregandoRef.current = false;
+      setAgregando(false);
+    }
+  };
+
+  const nuevaCategoria = () => {
+    setMostrarSugerencias(false);
+    setIdEditar(0);
+    setNombreNuevo("");
+    setIconoNuevo("");
+    setLimiteNuevo("");
+    setMostrarFormulario(true);
+  };
+
   const prepararEdicion = (categoria: any) => {
     setNombreNuevo(categoria.nombre);
     setIconoNuevo(categoria.icono);
@@ -213,12 +249,12 @@ export default function ScreenCategories({ onNav }: { onNav: (i: number) => void
         <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
           <Text style={{ fontSize: 24, fontWeight: "900", color: "#1E1B2E" }}>Categorías</Text>
           <TouchableOpacity 
-            onPress={() => setMostrarFormulario(!mostrarFormulario)}
+            onPress={() => { setMostrarFormulario(false); setMostrarSugerencias(true); }}
             style={{ backgroundColor: "#512DA8", flexDirection: "row", alignItems: "center", paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8 }}
           >
-            <Feather name={mostrarFormulario ? "minus" : "plus"} size={18} color="#fff" />
+            <Feather name="plus" size={18} color="#fff" />
             <Text style={{ color: "white", fontWeight: "bold", marginLeft: 4 }}>
-              {mostrarFormulario ? "Cerrar" : "Nueva"}
+              Nueva
             </Text>
           </TouchableOpacity>
         </View>
@@ -288,6 +324,9 @@ export default function ScreenCategories({ onNav }: { onNav: (i: number) => void
         </View>
 
         <View style={{ gap: 16 }}>
+          {listaCategorias.length === 0 && (
+            <Text style={{ color: "#6B6580" }}>No tienes categorías. Puedes crear una con Otros…</Text>
+          )}
           {listaCategorias.map((c) => {
             let limiteNum = parseInt(c.limite);
             if (isNaN(limiteNum) || limiteNum <= 0) limiteNum = 1;
@@ -338,8 +377,42 @@ export default function ScreenCategories({ onNav }: { onNav: (i: number) => void
               </View>
             );
           })}
+          <TouchableOpacity onPress={nuevaCategoria} style={{ backgroundColor: "#fff", borderRadius: 16, padding: 20, flexDirection: "row", alignItems: "center", gap: 12 }}>
+            <Feather name="plus-circle" size={24} color="#512DA8" />
+            <Text style={{ color: "#512DA8", fontSize: 16, fontWeight: "700" }}>Otros…</Text>
+          </TouchableOpacity>
         </View>
       </ScrollView>
+      <Modal visible={mostrarSugerencias} transparent animationType="slide" onRequestClose={() => { if (!agregando) setMostrarSugerencias(false); }}>
+        <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "center", padding: 24 }}>
+          <View style={{ backgroundColor: "#fff", borderRadius: 20, padding: 20, maxHeight: "85%" }}>
+            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+              <Text style={{ fontSize: 20, fontWeight: "700", color: "#1E1B2E", flex: 1 }}>Agregar categoría</Text>
+              <TouchableOpacity accessibilityLabel="Cerrar sugerencias" disabled={agregando} onPress={() => setMostrarSugerencias(false)} style={{ padding: 10 }}>
+                <Feather name="x" size={24} color="#512DA8" />
+              </TouchableOpacity>
+            </View>
+            <Text style={{ color: "#6B6580", marginBottom: 12 }}>Toca una para agregarla. Puedes editar su límite después.</Text>
+            <ScrollView>
+              {categoriasSugeridas.filter(c => !listaCategorias.some(actual => actual.nombre.trim().toLowerCase() === c.nombre.toLowerCase())).map(c => (
+                <TouchableOpacity key={c.nombre} disabled={agregando} onPress={() => agregarSugerida(c)} style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 14, borderBottomWidth: 1, borderColor: "#F5F3FA", opacity: agregando ? 0.5 : 1 }}>
+                  <Text style={{ fontSize: 24 }}>{c.icono}</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ color: "#1E1B2E", fontWeight: "600", fontSize: 16 }}>{c.nombre}</Text>
+                    <Text style={{ color: "#6B6580", fontSize: 12 }}>Límite mensual: ${c.limite.toLocaleString("es-CL")}</Text>
+                  </View>
+                  <Feather name="plus" size={20} color="#512DA8" />
+                </TouchableOpacity>
+              ))}
+              <TouchableOpacity disabled={agregando} onPress={nuevaCategoria} style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 18 }}>
+                <Feather name="edit-3" size={24} color="#512DA8" />
+                <Text style={{ color: "#512DA8", fontSize: 16, fontWeight: "700" }}>Otros…</Text>
+              </TouchableOpacity>
+            </ScrollView>
+            {agregando && <Text style={{ color: "#512DA8", marginTop: 12 }}>Agregando categoría…</Text>}
+          </View>
+        </View>
+      </Modal>
       <BottomNav active={3} onNav={onNav} />
     </View>
   );

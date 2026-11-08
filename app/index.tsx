@@ -104,7 +104,7 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <View style={{ flex: 1, backgroundColor: "#F5F3FA" }}>
-        <StatusBar barStyle="dark-content" />
+        <StatusBar barStyle="light-content" />
         {renderScreen()}
       </View>
     </SafeAreaProvider>

@@ -2,7 +2,7 @@
 import { Feather } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import React, { useEffect, useState } from "react";
-import { Alert, Animated, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { Alert, ScrollView, Text, TextInput, TouchableOpacity, View } from "react-native";
 import BottomNav from "../components/BottomNav";
 import MiniBadge from "../components/MiniBadge";
 import ProgressBar from "../components/ProgressBar";
@@ -19,26 +19,6 @@ export default function ScreenDashboard({ onNav }: { onNav: (i: number) => void 
   const [categoriasDinamicas, setCategoriasDinamicas] = useState<any[]>([]);
   const [idEditar, setIdEditar] = useState<number | null>(null);
   const [montoEditar, setMontoEditar] = useState("");
-
-  const scrollY = React.useRef(new Animated.Value(0)).current;
-
-  const headerHeight = scrollY.interpolate({
-    inputRange: [0, 80],
-    outputRange: [56, 36],
-    extrapolate: "clamp",
-  });
-
-  const headerOpacity = scrollY.interpolate({
-    inputRange: [0, 50],
-    outputRange: [1, 0.95],
-    extrapolate: "clamp",
-  });
-
-  const textScale = scrollY.interpolate({
-    inputRange: [0, 80],
-    outputRange: [1, 0.75],
-    extrapolate: "clamp",
-  });
 
   // 1. Obtener perfil (nombre y sueldo) desde Supabase
   const cargarUsuarioAuth = async () => {
@@ -90,28 +70,11 @@ export default function ScreenDashboard({ onNav }: { onNav: (i: number) => void 
       setTotalGastado(sumaTotal);
 
       // Obtener categorías de este usuario
-      let { data: categoriasDB } = await supabase
+      const { data: categoriasDB } = await supabase
         .from("categorias")
         .select("*")
         .eq("usuario_id", user.id)
         .order("id", { ascending: true });
-
-      // Si el usuario es nuevo y no tiene categorías, le creamos las básicas iniciales
-      if (!categoriasDB || categoriasDB.length === 0) {
-        const categoriasBase = [
-          { usuario_id: user.id, nombre: "Alimentación", icono: "🍔", limite: 160000, color: "#7E57C2" },
-          { usuario_id: user.id, nombre: "Transporte", icono: "🚗", limite: 80000, color: "#F9A825" },
-          { usuario_id: user.id, nombre: "Compras", icono: "🛍️", limite: 130000, color: "#C62828" },
-          { usuario_id: user.id, nombre: "Salud", icono: "❤️", limite: 55000, color: "#2E7D32" },
-        ];
-
-        const { data: insertadas } = await supabase
-          .from("categorias")
-          .insert(categoriasBase)
-          .select();
-
-        categoriasDB = insertadas || [];
-      }
 
       // Procesar gastos agrupados por cada categoría
       const categoriasProcesadas = (categoriasDB || []).map((cat) => {
@@ -243,33 +206,8 @@ export default function ScreenDashboard({ onNav }: { onNav: (i: number) => void 
 
   return (
     <View style={{ flex: 1, backgroundColor: "#F5F3FA" }}>
-      {/* Header Animado */}
-      <Animated.View
-        style={{
-          height: headerHeight,
-          opacity: headerOpacity,
-          backgroundColor: "#512DA8",
-          justifyContent: "center",
-          alignItems: "center",
-          overflow: "hidden",
-        }}
-      >
-        <Animated.Text
-          style={{
-            color: "#fff",
-            fontSize: 18,
-            fontWeight: "bold",
-            transform: [{ scale: textScale }],
-          }}
-        >
-          FinZen
-        </Animated.Text>
-      </Animated.View>
-
-      <Animated.ScrollView
+      <ScrollView
         contentContainerStyle={{ padding: 20, paddingBottom: 100 }}
-        scrollEventThrottle={16}
-        onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: false })}
       >
         {/* Saludo dinámico con el nombre del usuario */}
         <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
@@ -428,7 +366,7 @@ export default function ScreenDashboard({ onNav }: { onNav: (i: number) => void 
             ))
           )}
         </View>
-      </Animated.ScrollView>
+      </ScrollView>
       <BottomNav active={2} onNav={onNav} />
     </View>
   );

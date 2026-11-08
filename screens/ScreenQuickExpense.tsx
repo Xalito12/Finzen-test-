@@ -6,6 +6,7 @@ import {
   Alert,
   ScrollView,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -13,6 +14,9 @@ import BottomNav from "../components/BottomNav";
 import { supabase } from "../database/supabase";
 
 export default function ScreenQuickExpense({ onNav }: { onNav: (i: number) => void }) {
+  const [crearCategoria, setCrearCategoria] = useState(false);
+  const [nombreCategoria, setNombreCategoria] = useState("");
+  const [creando, setCreando] = useState(false);
   const [amount, setAmount] = useState("0");
   const [cats, setCats] = useState<any[]>([]);
   const [selected, setSelected] = useState(0);
@@ -33,7 +37,7 @@ export default function ScreenQuickExpense({ onNav }: { onNav: (i: number) => vo
           return;
         }
 
-        let { data: categoriasDB, error } = await supabase
+        const { data: categoriasDB, error } = await supabase
           .from("categorias")
           .select("*")
           .eq("usuario_id", user.id)
@@ -42,23 +46,6 @@ export default function ScreenQuickExpense({ onNav }: { onNav: (i: number) => vo
         if (error) {
           console.error("Error al obtener categorías:", error.message);
           return;
-        }
-
-        // Si el usuario aún no tiene categorías, insertamos las iniciales en Supabase
-        if (!categoriasDB || categoriasDB.length === 0) {
-          const categoriasBase = [
-            { usuario_id: user.id, nombre: "Alimentación", icono: "🍔", limite: 160000, color: "#7E57C2" },
-            { usuario_id: user.id, nombre: "Transporte", icono: "🚗", limite: 80000, color: "#F9A825" },
-            { usuario_id: user.id, nombre: "Compras", icono: "🛍️", limite: 130000, color: "#C62828" },
-            { usuario_id: user.id, nombre: "Salud", icono: "❤️", limite: 55000, color: "#2E7D32" },
-          ];
-
-          const { data: insertadas } = await supabase
-            .from("categorias")
-            .insert(categoriasBase)
-            .select();
-
-          categoriasDB = insertadas || [];
         }
 
         setCats(categoriasDB || []);
@@ -71,6 +58,34 @@ export default function ScreenQuickExpense({ onNav }: { onNav: (i: number) => vo
 
     cargarCategoriasUsuario();
   }, []);
+
+  const guardarNuevaCategoria = async () => {
+    const nombre = nombreCategoria.trim();
+    if (!nombre || creando) return;
+    setCreando(true);
+    try {
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError) throw authError;
+      if (!user) throw new Error("No hay una sesión activa.");
+      const existente = cats.findIndex(c => c.nombre.toLowerCase() === nombre.toLowerCase());
+      if (existente >= 0) {
+        setSelected(existente);
+      } else {
+        const { data, error } = await supabase.from("categorias").insert({
+          usuario_id: user.id, nombre, icono: "🏷️", limite: 100000, color: "#512DA8",
+        }).select().single();
+        if (error) throw error;
+        setSelected(cats.length);
+        setCats([...cats, data]);
+      }
+      setNombreCategoria("");
+      setCrearCategoria(false);
+    } catch (error: any) {
+      Alert.alert("Error al crear categoría", error.message);
+    } finally {
+      setCreando(false);
+    }
+  };
 
   const keys = ["1", "2", "3", "4", "5", "6", "7", "8", "9", ".", "0", "⌫"];
 
@@ -148,7 +163,7 @@ export default function ScreenQuickExpense({ onNav }: { onNav: (i: number) => vo
           <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 20 }}>
             {cats.length === 0 ? (
               <Text style={{ color: "#6B6580", fontSize: 13, textAlign: "center", width: "100%", marginVertical: 10 }}>
-                No hay categorías disponibles. Crea una primero en la sección Categorías.
+                No tienes categorías. Agrega una con Otros…
               </Text>
             ) : (
               cats.map((c, i) => (
@@ -180,6 +195,21 @@ export default function ScreenQuickExpense({ onNav }: { onNav: (i: number) => vo
                 </TouchableOpacity>
               ))
             )}
+            <TouchableOpacity onPress={() => setCrearCategoria(true)} style={{ width: "31%", paddingVertical: 12, borderRadius: 12, backgroundColor: "#fff", alignItems: "center", borderWidth: 1, borderColor: "#E8E4F0" }}>
+              <Feather name="plus" size={20} color="#512DA8" />
+              <Text style={{ color: "#512DA8", marginTop: 4 }}>Otros…</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+        {crearCategoria && (
+          <View style={{ padding: 16, backgroundColor: "#fff", borderRadius: 12, marginBottom: 20, gap: 12 }}>
+            <Text style={{ fontWeight: "700" }}>Nueva categoría</Text>
+            <TextInput autoFocus placeholder="Ej. Mascotas" value={nombreCategoria} onChangeText={setNombreCategoria} style={{ padding: 12, backgroundColor: "#F5F3FA", borderRadius: 8 }} />
+            <Text style={{ color: "#6B6580", fontSize: 12 }}>Límite inicial: $100.000. Puedes editarlo en Categorías.</Text>
+            <TouchableOpacity disabled={creando || !nombreCategoria.trim()} onPress={guardarNuevaCategoria}>
+              <Text style={{ color: "#512DA8", fontWeight: "700" }}>{creando ? "Creando…" : "Crear y seleccionar"}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity disabled={creando} onPress={() => setCrearCategoria(false)}><Text>Cancelar</Text></TouchableOpacity>
           </View>
         )}
 
