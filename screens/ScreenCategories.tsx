@@ -1,7 +1,13 @@
 // screens/ScreenCategories.tsx
 import { Feather } from "@expo/vector-icons";
 import { useIsFocused } from "@react-navigation/native";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   Alert,
   Modal,
@@ -15,7 +21,11 @@ import { supabase } from "../database/supabase";
 import {
   consultarCategorias,
   resumirGastos,
+  type CategoriaResumen,
 } from "../database/consultasFinanzas";
+
+type CategoriaConTotales = CategoriaResumen & { gastado: number };
+type IdCategoria = CategoriaResumen["id"];
 
 const categoriasSugeridas = [
   { nombre: "Alimentación", icono: "🍔", limite: 160000, color: "#7E57C2" },
@@ -42,12 +52,43 @@ export default function ScreenCategories({
   const [mostrarSugerencias, setMostrarSugerencias] = useState(false);
   const [agregando, setAgregando] = useState(false);
   const agregandoRef = useRef(false);
-  const [listaCategorias, setListaCategorias] = useState<any[]>([]);
-  const [enAlerta, setEnAlerta] = useState(0);
-  const [sobrepasadas, setSobrepasadas] = useState(0);
+  const [categoriasGuardadas, setListaCategorias] = useState<
+    CategoriaConTotales[]
+  >([]);
+  const eliminaciones = useRef(new Map<IdCategoria, CategoriaConTotales>());
+  const montado = useRef(true);
+  const [idsEliminando, setIdsEliminando] = useState<ReadonlySet<IdCategoria>>(
+    new Set(),
+  );
+  const listaCategorias = useMemo(
+    () => categoriasGuardadas.filter((c) => !idsEliminando.has(c.id)),
+    [categoriasGuardadas, idsEliminando],
+  );
+  const { enAlerta, sobrepasadas } = useMemo(() => {
+    let enAlerta = 0,
+      sobrepasadas = 0;
+    for (const categoria of listaCategorias) {
+      const limite = Number(categoria.limite);
+      const porcentaje = Math.round(
+        (categoria.gastado /
+          (Number.isFinite(limite) && limite > 0 ? limite : 1)) *
+          100,
+      );
+      if (porcentaje > 100) sobrepasadas++;
+      else if (porcentaje >= 80) enAlerta++;
+    }
+    return { enAlerta, sobrepasadas };
+  }, [listaCategorias]);
+
+  useEffect(() => {
+    montado.current = true;
+    return () => {
+      montado.current = false;
+    };
+  }, []);
 
   const [mostrarFormulario, setMostrarFormulario] = useState(false);
-  const [idEditar, setIdEditar] = useState(0);
+  const [idEditar, setIdEditar] = useState<IdCategoria | 0>(0);
   const [nombreNuevo, setNombreNuevo] = useState("");
   const [iconoNuevo, setIconoNuevo] = useState("");
   const [limiteNuevo, setLimiteNuevo] = useState("");
@@ -61,8 +102,6 @@ export default function ScreenCategories({
         await consultarCategorias();
       if (!focusedRef.current || solicitud !== ultimaCarga.current) return;
       const resumen = resumirGastos(listaGastos);
-      let conteoAlerta = 0;
-      let conteoSobrepasado = 0;
       let categoriasConTotales = [];
 
       for (let i = 0; i < (categoriasDB || []).length; i++) {
@@ -71,22 +110,10 @@ export default function ScreenCategories({
           categoriaActual.nombre,
         );
 
-        let limiteNum = Number(categoriaActual.limite);
-        if (isNaN(limiteNum) || limiteNum <= 0) limiteNum = 1;
-
-        let porcentaje = Math.round(
-          (categoriaActual.gastado / limiteNum) * 100,
-        );
-
-        if (porcentaje > 100) conteoSobrepasado += 1;
-        else if (porcentaje >= 80) conteoAlerta += 1;
-
         categoriasConTotales.push(categoriaActual);
       }
 
       setListaCategorias(categoriasConTotales);
-      setEnAlerta(conteoAlerta);
-      setSobrepasadas(conteoSobrepasado);
     } catch (err: any) {
       if (focusedRef.current && solicitud === ultimaCarga.current) {
         console.error("Error al cargar categorías de Supabase:", err.message);
@@ -102,8 +129,20 @@ export default function ScreenCategories({
     };
   }, [isFocused, cargarCategorias]);
 
+  const nombreEnEliminacion = (nombre: string) =>
+    [...eliminaciones.current.values()].some(
+      (c) => c.nombre.trim().toLowerCase() === nombre.trim().toLowerCase(),
+    );
+
   // 2. Guardar o actualizar la categoría en Supabase
   const guardarCategoria = async () => {
+    if (nombreEnEliminacion(nombreNuevo)) {
+      Alert.alert(
+        "Un momento",
+        "Espera a que termine de eliminarse esa categoría.",
+      );
+      return;
+    }
     if (!nombreNuevo.trim()) {
       Alert.alert("Atención", "Por favor ingresa un nombre para la categoría.");
       return;
@@ -172,7 +211,7 @@ export default function ScreenCategories({
   const agregarSugerida = async (
     categoria: (typeof categoriasSugeridas)[number],
   ) => {
-    if (agregandoRef.current) return;
+    if (agregandoRef.current || nombreEnEliminacion(categoria.nombre)) return;
     agregandoRef.current = true;
     setAgregando(true);
     try {
@@ -225,29 +264,73 @@ export default function ScreenCategories({
     setMostrarFormulario(true);
   };
 
-  // 3. Borrar la categoría en Supabase
-  const borrarCategoria = async (idBorrar: number) => {
+  // Retira la fila al tocar, sin esperar la respuesta de la red.
+  const borrarCategoria = async (idBorrar: IdCategoria) => {
+    const categoria = categoriasGuardadas.find((c) => c.id === idBorrar);
+    if (!categoria || eliminaciones.current.has(idBorrar)) return;
+    eliminaciones.current.set(idBorrar, categoria);
+    ultimaCarga.current += 1;
+    setIdsEliminando(new Set(eliminaciones.current.keys()));
+    if (idEditar === idBorrar) {
+      setMostrarFormulario(false);
+      setIdEditar(0);
+    }
     try {
       const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      if (!user) return;
-
-      const { error } = await supabase
+        data: { session },
+        error: errorSesion,
+      } = await supabase.auth.getSession();
+      if (errorSesion) throw errorSesion;
+      if (!session?.user) throw new Error("No hay una sesión activa.");
+      const { data, error } = await supabase
         .from("categorias")
         .delete()
         .eq("id", idBorrar)
-        .eq("usuario_id", user.id);
-
-      if (error) {
-        Alert.alert("Error al eliminar", error.message);
-        return;
+        .eq("usuario_id", session.user.id)
+        .select("id");
+      if (error) throw error;
+      // Una fila ya eliminada en otra sesión tampoco debe reaparecer.
+      if (!data?.length) {
+        const { data: existente, error: errorConsulta } = await supabase
+          .from("categorias")
+          .select("id")
+          .eq("id", idBorrar)
+          .eq("usuario_id", session.user.id)
+          .maybeSingle();
+        if (errorConsulta) throw errorConsulta;
+        if (existente)
+          throw new Error(
+            "No se pudo eliminar la categoría. Revisa tus permisos o inténtalo nuevamente.",
+          );
       }
-
-      cargarCategorias();
-    } catch (err: any) {
-      Alert.alert("Error", err.message);
+      if (montado.current)
+        setListaCategorias((actuales) =>
+          actuales.filter((c) => c.id !== idBorrar),
+        );
+    } catch (error: unknown) {
+      if (montado.current) {
+        // Restaura solo esta categoría; no repone otras eliminadas después.
+        setListaCategorias((actuales) =>
+          actuales.some((c) => c.id === idBorrar)
+            ? actuales
+            : [...actuales, categoria],
+        );
+        Alert.alert(
+          "No se pudo eliminar",
+          error instanceof Error
+            ? error.message
+            : "Se restauró la categoría. Inténtalo nuevamente.",
+        );
+      }
+    } finally {
+      eliminaciones.current.delete(idBorrar);
+      ultimaCarga.current += 1;
+      if (montado.current) {
+        setIdsEliminando(new Set(eliminaciones.current.keys()));
+        // Reconciliación en segundo plano, sin retrasar la desaparición.
+        if (eliminaciones.current.size === 0 && focusedRef.current)
+          cargarCategorias();
+      }
     }
   };
 
@@ -394,7 +477,7 @@ export default function ScreenCategories({
             </Text>
           )}
           {listaCategorias.map((c) => {
-            let limiteNum = parseInt(c.limite);
+            let limiteNum = Number(c.limite);
             if (isNaN(limiteNum) || limiteNum <= 0) limiteNum = 1;
             let p = Math.round((c.gastado / limiteNum) * 100);
 
@@ -444,7 +527,12 @@ export default function ScreenCategories({
                     <TouchableOpacity onPress={() => prepararEdicion(c)}>
                       <Feather name="edit-2" size={18} color="#8A849C" />
                     </TouchableOpacity>
-                    <TouchableOpacity onPress={() => borrarCategoria(c.id)}>
+                    <TouchableOpacity
+                      accessibilityRole="button"
+                      accessibilityLabel={`Eliminar categoría ${c.nombre}`}
+                      hitSlop={8}
+                      onPress={() => borrarCategoria(c.id)}
+                    >
                       <Feather name="trash-2" size={18} color="#8A849C" />
                     </TouchableOpacity>
                   </View>
@@ -516,11 +604,11 @@ export default function ScreenCategories({
               {categoriasSugeridas
                 .filter(
                   (c) =>
-                    !listaCategorias.some(
+                    !categoriasGuardadas.some(
                       (actual) =>
                         actual.nombre.trim().toLowerCase() ===
                         c.nombre.toLowerCase(),
-                    ),
+                    ) && !nombreEnEliminacion(c.nombre),
                 )
                 .map((c) => (
                   <TouchableOpacity
