@@ -27,6 +27,7 @@ import {
 import { calcularEstadoPresupuesto } from "../models/estadoPresupuesto";
 import { generarNotificaciones } from "../models/notificaciones";
 import { listarMetas } from "../database/metasService";
+import { confirmarEliminacion } from "../utils/confirmarEliminacion";
 
 interface CategoriaInicio {
   id: number | string;
@@ -109,6 +110,18 @@ export default function ScreenDashboard({
   const [montoEditar, setMontoEditar] = useState("");
 
   const ultimaCarga = useRef(0);
+  const gastosActuales = useRef(listaGastos);
+  gastosActuales.current = listaGastos;
+  const pantallaActiva = useRef(active);
+  pantallaActiva.current = active;
+  const montado = useRef(true);
+  const borrandoGastos = useRef(new Set<GastoResumen["id"]>());
+  useEffect(() => {
+    montado.current = true;
+    return () => {
+      montado.current = false;
+    };
+  }, []);
 
   const cargarInicio = useCallback(async () => {
     const solicitud = ++ultimaCarga.current;
@@ -209,8 +222,10 @@ export default function ScreenDashboard({
   };
 
   // 4. Borrar gasto de Supabase
-  const borrarGasto = useCallback(
+  const eliminarGasto = useCallback(
     async (idBorrar: GastoResumen["id"]) => {
+      if (borrandoGastos.current.has(idBorrar) || !montado.current) return;
+      borrandoGastos.current.add(idBorrar);
       try {
         const { error } = await supabase
           .from("gastos")
@@ -225,10 +240,33 @@ export default function ScreenDashboard({
         setIdEditar((actual) => (actual === idBorrar ? null : actual));
         cargarInicio();
       } catch (err: any) {
-        Alert.alert("Error", err.message);
+        if (montado.current) Alert.alert("Error", err.message);
+      } finally {
+        borrandoGastos.current.delete(idBorrar);
       }
     },
     [cargarInicio],
+  );
+
+  const borrarGasto = useCallback(
+    (id: GastoResumen["id"]) => {
+      const gasto = gastosActuales.current.find((item) => item.id === id);
+      if (!gasto || borrandoGastos.current.has(id)) return;
+      confirmarEliminacion(
+        "Eliminar gasto",
+        `¿Quieres eliminar el gasto de «${gasto.categoria}» por $${Number(gasto.monto).toLocaleString("es-CL")}?`,
+        () => {
+          if (
+            montado.current &&
+            pantallaActiva.current &&
+            gastosActuales.current.some((item) => item.id === id)
+          ) {
+            void eliminarGasto(id);
+          }
+        },
+      );
+    },
+    [eliminarGasto],
   );
 
   const prepararEdicion = useCallback((gasto: GastoResumen) => {

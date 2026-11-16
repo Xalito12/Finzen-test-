@@ -15,6 +15,7 @@ import {
   View,
 } from "react-native";
 import ProgressBar from "../components/ProgressBar";
+import { confirmarEliminacion } from "../utils/confirmarEliminacion";
 import {
   actualizarMeta,
   crearMeta,
@@ -77,6 +78,8 @@ export default function ScreenSavingsGoals({
     guardandoRef = useRef(false);
   const borrados = useRef(new Map<string, MetaAhorro>());
   const [metas, setMetas] = useState<MetaAhorro[]>([]);
+  const metasRef = useRef(metas);
+  metasRef.current = metas;
   const [cargando, setCargando] = useState(true),
     [refrescando, setRefrescando] = useState(false);
   const [error, setError] = useState("");
@@ -200,6 +203,22 @@ export default function ScreenSavingsGoals({
       guardandoRef.current = false;
       if (montado.current) setGuardando(false);
     }
+  };
+  const pedirEliminarMeta = (meta: MetaAhorro) => {
+    if (borrados.current.has(meta.id) || guardandoRef.current) return;
+    confirmarEliminacion(
+      "Eliminar meta",
+      `¿Quieres eliminar la meta «${meta.nombre}» y su registro de progreso?`,
+      () => {
+        if (
+          montado.current &&
+          focusedRef.current &&
+          metasRef.current.some((m) => m.id === meta.id)
+        ) {
+          void borrar(meta);
+        }
+      },
+    );
   };
   const borrar = async (meta: MetaAhorro) => {
     if (borrados.current.has(meta.id) || guardandoRef.current) return;
@@ -397,7 +416,7 @@ export default function ScreenSavingsGoals({
                   accessibilityRole="button"
                   accessibilityLabel={`Eliminar meta ${meta.nombre}`}
                   hitSlop={8}
-                  onPress={() => borrar(meta)}
+                  onPress={() => pedirEliminarMeta(meta)}
                   disabled={guardando}
                   className="p-[10px]"
                 >

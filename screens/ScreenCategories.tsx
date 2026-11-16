@@ -19,6 +19,7 @@ import {
   View,
 } from "react-native";
 import { supabase } from "../database/supabase";
+import { confirmarEliminacion } from "../utils/confirmarEliminacion";
 import {
   consultarCategorias,
   resumirGastos,
@@ -68,6 +69,8 @@ export default function ScreenCategories({
   const [categoriasGuardadas, setListaCategorias] = useState<
     CategoriaConTotales[]
   >([]);
+  const categoriasRef = useRef(categoriasGuardadas);
+  categoriasRef.current = categoriasGuardadas;
   const eliminaciones = useRef(new Map<IdCategoria, CategoriaConTotales>());
   // Conserva las eliminaciones confirmadas frente a lecturas antiguas.
   const eliminadasConfirmadas = useRef(new Set<IdCategoria>());
@@ -278,6 +281,23 @@ export default function ScreenCategories({
     setLimiteNuevo(categoria.limite.toString());
     setIdEditar(categoria.id);
     setMostrarFormulario(true);
+  };
+
+  const pedirEliminarCategoria = (categoria: CategoriaConTotales) => {
+    if (eliminaciones.current.has(categoria.id)) return;
+    confirmarEliminacion(
+      "Eliminar categoría",
+      `¿Quieres eliminar la categoría «${categoria.nombre}»?`,
+      () => {
+        if (
+          montado.current &&
+          focusedRef.current &&
+          categoriasRef.current.some((c) => c.id === categoria.id)
+        ) {
+          void borrarCategoria(categoria.id);
+        }
+      },
+    );
   };
 
   // Retira la fila al tocar, sin esperar la respuesta de la red.
@@ -574,7 +594,7 @@ export default function ScreenCategories({
                       accessibilityRole="button"
                       accessibilityLabel={`Eliminar categoría ${c.nombre}`}
                       hitSlop={4}
-                      onPress={() => borrarCategoria(c.id)}
+                      onPress={() => pedirEliminarCategoria(c)}
                       style={({ pressed }) => ({
                         minWidth: 44,
                         minHeight: 44,
