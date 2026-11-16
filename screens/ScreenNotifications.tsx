@@ -1,6 +1,5 @@
 import React from "react";
 import { ScrollView, Text, View } from "react-native";
-import BottomNav from "../components/BottomNav";
 
 export default function ScreenNotifications({
   onNav,
@@ -27,7 +26,10 @@ export default function ScreenNotifications({
 
   return (
     <View className="flex-1">
-      <ScrollView contentContainerStyle={{ padding: 20 }}>
+      <ScrollView
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={{ padding: 20 }}
+      >
         <Text className="text-[20px] font-bold mb-[16px]">Notificaciones</Text>
         <View className="gap-[10px]">
           {alerts.map((a, i) => (
@@ -44,7 +46,6 @@ export default function ScreenNotifications({
           ))}
         </View>
       </ScrollView>
-      <BottomNav active={6} onNav={onNav} />
     </View>
   );
 }

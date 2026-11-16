@@ -1,119 +1,184 @@
-import React, { useEffect, useState } from "react";
-import { ActivityIndicator, StatusBar, View } from "react-native";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import {
+  ActivityIndicator,
+  Pressable,
+  StatusBar,
+  Text,
+  View,
+} from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { supabase } from "../database/supabase";
-
-import ScreenCategories from "../screens/ScreenCategories";
-import ScreenDashboard from "../screens/ScreenDashboard";
+import FinzenTabs from "../navigation/FinzenTabs";
 import ScreenLogin from "../screens/ScreenLogin";
-import ScreenNotifications from "../screens/ScreenNotifications";
 import ScreenOnboarding from "../screens/ScreenOnboarding";
-import ScreenProfile from "../screens/ScreenProfile";
-import ScreenQuickExpense from "../screens/ScreenQuickExpense";
-import ScreenRecurring from "../screens/ScreenRecurring";
 import ScreenRegister from "../screens/ScreenRegister";
 import ScreenSalarySetup from "../screens/ScreenSalarySetup";
-import ScreenSavingsGoals from "../screens/ScreenSavingsGoals";
+
+type Etapa =
+  | "Comprobando"
+  | "Bienvenida"
+  | "Ingreso"
+  | "Registro"
+  | "Sueldo"
+  | "Aplicacion"
+  | "Error";
 
 export default function App() {
-  const [screen, setScreen] = useState<number | null>(null);
-  const [usuarioInicio, setUsuarioInicio] = useState<string | null>(null);
+  const [etapa, setEtapa] = useState<Etapa>("Comprobando");
+  const [usuario, setUsuario] = useState<string | null>(null);
+  const [mensaje, setMensaje] = useState("");
+  const revision = useRef(0);
+
+  const cargarSesion = useCallback(async () => {
+    const solicitud = ++revision.current;
+    setEtapa("Comprobando");
+    setMensaje("");
+    try {
+      const {
+        data: { session },
+        error,
+      } = await supabase.auth.getSession();
+      if (solicitud !== revision.current) return;
+      if (error) throw error;
+      if (!session?.user) {
+        setUsuario(null);
+        setEtapa("Bienvenida");
+        return;
+      }
+      const { data: perfil, error: errorPerfil } = await supabase
+        .from("perfiles")
+        .select("sueldo")
+        .eq("id", session.user.id)
+        .maybeSingle();
+      if (solicitud !== revision.current) return;
+      if (errorPerfil) throw errorPerfil;
+      setUsuario(session.user.id);
+      setEtapa(Number(perfil?.sueldo) > 0 ? "Aplicacion" : "Sueldo");
+    } catch (error: unknown) {
+      if (solicitud !== revision.current) return;
+      setMensaje(
+        error instanceof Error
+          ? error.message
+          : "No se pudo comprobar tu sesión.",
+      );
+      setEtapa("Error");
+    }
+  }, []);
+
+  const volverABienvenida = useCallback(() => {
+    revision.current += 1;
+    setUsuario(null);
+    setMensaje("");
+    setEtapa("Bienvenida");
+  }, []);
 
   useEffect(() => {
-    // 1. Al abrir la app por primera vez:
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (session?.user) {
-        setUsuarioInicio(session.user.id);
-        const { data: perfil } = await supabase
-          .from("perfiles")
-          .select("sueldo")
-          .eq("id", session.user.id)
-          .single();
-
-        if (perfil && perfil.sueldo > 0) {
-          setScreen(2); // Sueldo ya definido -> Dashboard
-        } else {
-          setScreen(1); // Sueldo pendiente -> Configurar sueldo
-        }
-      } else {
-        setScreen(0); // Sin sesión -> Onboarding
-      }
-    });
-
-    // 2. Escucha si el usuario cierra sesión (logout)
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === "SIGNED_IN" && session?.user) {
-        setUsuarioInicio(session.user.id);
-      }
-      if (event === "SIGNED_OUT") {
-        setUsuarioInicio(null);
-        setScreen(0);
-      }
+      if (event === "SIGNED_OUT") volverABienvenida();
+      else if (event === "SIGNED_IN" && session?.user)
+        setUsuario(session.user.id);
     });
-
+    cargarSesion();
     return () => {
+      revision.current += 1;
       subscription.unsubscribe();
     };
+  }, [cargarSesion, volverABienvenida]);
+
+  // Solo los formularios de acceso conservan sus callbacks anteriores.
+  const navegarAcceso = useCallback(async (destino: number) => {
+    const solicitud = ++revision.current;
+    setMensaje("");
+    if (destino === 0) {
+      setEtapa("Bienvenida");
+      return;
+    }
+    if (destino === 9) {
+      setEtapa("Registro");
+      return;
+    }
+    if (destino === 10) {
+      setEtapa("Ingreso");
+      return;
+    }
+    if (destino !== 1 && destino !== 2) return;
+    const {
+      data: { session },
+      error,
+    } = await supabase.auth.getSession();
+    if (solicitud !== revision.current) return;
+    if (error || !session?.user) {
+      setUsuario(null);
+      setMensaje(
+        "Inicia sesión para continuar. Si acabas de registrarte, revisa si debes confirmar tu correo.",
+      );
+      setEtapa("Ingreso");
+      return;
+    }
+    setUsuario(session.user.id);
+    setEtapa(destino === 1 ? "Sueldo" : "Aplicacion");
   }, []);
 
-  const renderScreen = () => {
-    switch (screen) {
-      case 0:
-        return (
-          <ScreenOnboarding
-            onRegister={() => setScreen(9)}
-            onLogin={() => setScreen(10)}
-          />
-        );
-      case 1:
-        return <ScreenSalarySetup onNext={() => setScreen(2)} />;
-      case 2:
-        return null;
-      case 3:
-        return <ScreenCategories onNav={setScreen} />;
-      case 4:
-        return <ScreenQuickExpense onNav={setScreen} />;
-      case 5:
-        return <ScreenSavingsGoals onNav={setScreen} />;
-      case 6:
-        return <ScreenNotifications onNav={setScreen} />;
-      case 7:
-        return <ScreenRecurring onNav={setScreen} />;
-      case 8:
-        return <ScreenProfile onNav={setScreen} />;
-      case 9:
-        return <ScreenRegister onNav={setScreen} />;
-      case 10:
-        return <ScreenLogin onNav={setScreen} />;
-      default:
-        return null;
-    }
-  };
-
-  if (screen === null) {
-    return (
-      <View className="flex-1 bg-bg justify-center items-center">
-        <ActivityIndicator size="large" color="#512DA8" />
-      </View>
-    );
+  let contenido: React.ReactNode;
+  switch (etapa) {
+    case "Bienvenida":
+      contenido = (
+        <ScreenOnboarding
+          onRegister={() => setEtapa("Registro")}
+          onLogin={() => setEtapa("Ingreso")}
+        />
+      );
+      break;
+    case "Ingreso":
+      contenido = <ScreenLogin onNav={navegarAcceso} />;
+      break;
+    case "Registro":
+      contenido = <ScreenRegister onNav={navegarAcceso} />;
+      break;
+    case "Sueldo":
+      contenido = <ScreenSalarySetup onNext={() => navegarAcceso(2)} />;
+      break;
+    case "Aplicacion":
+      contenido = usuario ? (
+        <FinzenTabs key={usuario} onSalir={volverABienvenida} />
+      ) : (
+        <ActivityIndicator color="#512DA8" />
+      );
+      break;
+    case "Error":
+      contenido = (
+        <View className="flex-1 items-center justify-center p-[24px]">
+          <Text className="text-text text-center">{mensaje}</Text>
+          <Pressable
+            accessibilityRole="button"
+            onPress={cargarSesion}
+            className="bg-primary p-[16px] rounded-[12px] mt-[16px]"
+          >
+            <Text className="text-card font-bold">Reintentar</Text>
+          </Pressable>
+        </View>
+      );
+      break;
+    default:
+      contenido = (
+        <View className="flex-1 items-center justify-center">
+          <ActivityIndicator size="large" color="#512DA8" />
+        </View>
+      );
   }
 
   return (
     <SafeAreaProvider>
       <View className="flex-1 bg-bg">
         <StatusBar barStyle="light-content" />
-        {usuarioInicio && screen >= 2 && screen <= 8 && (
-          <View style={{ flex: 1, display: screen === 2 ? "flex" : "none" }}>
-            <ScreenDashboard
-              key={usuarioInicio}
-              active={screen === 2}
-              onNav={setScreen}
-            />
-          </View>
-        )}
-        {renderScreen()}
+        {mensaje && etapa === "Ingreso" ? (
+          <Text accessibilityRole="alert" className="text-primary p-[12px]">
+            {mensaje}
+          </Text>
+        ) : null}
+        {contenido}
       </View>
     </SafeAreaProvider>
   );

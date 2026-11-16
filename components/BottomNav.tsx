@@ -1,87 +1,82 @@
-// components/BottomNav.tsx
 import { Feather } from "@expo/vector-icons";
+import type { BottomTabBarProps } from "@react-navigation/bottom-tabs";
 import React from "react";
-import { Platform, Text, TouchableOpacity, View } from "react-native";
+import { Platform, Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { pestanasVisibles } from "../navigation/rutas";
 
-interface BottomNavProps {
-  active: number;
-  onNav: (screenIndex: number) => void;
-}
-
-export default function BottomNav({ active, onNav }: BottomNavProps) {
-  // Obtiene la distancia exacta que ocupan los botones virtuales o la barra gestual del teléfono
+// Una sola barra, medida por el navegador y fuera del contenido desplazable.
+export default function BottomNav({ state, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
-
-  // Si insets.bottom es 0 (en algunos modelos Android con botones clásicos), damos un margen de respaldo de 12px
-  const paddingInferior = Math.max(
-    insets.bottom,
-    Platform.OS === "android" ? 12 : 16,
-  );
-
-  const tabs = [
-    { id: 2, label: "Inicio", icon: "home" },
-    { id: 3, label: "Categorías", icon: "grid" },
-    { id: 4, label: "Gasto", isAdd: true }, // Botón central circular
-    { id: 7, label: "Metas", icon: "target" },
-    { id: 8, label: "Perfil", icon: "user" },
-  ];
-
   return (
     <View
-      className="absolute bottom-[0px] left-[0px] right-[0px] bg-card pt-[10px] px-[12px] border-t-[1px] border-t-[#F0EEF6] flex-row items-center justify-around"
+      accessibilityRole="tablist"
+      className="bg-card flex-row items-center justify-around border-t-[1px] border-border px-[8px] pt-[10px]"
       style={{
-        paddingBottom: paddingInferior,
-        elevation: 12, // Sombra en Android
-        shadowColor: "#000", // Sombra en iOS
-        shadowOffset: { width: 0, height: -3 },
+        paddingBottom: Math.max(
+          insets.bottom,
+          Platform.OS === "android" ? 12 : 16,
+        ),
+        elevation: 8,
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: -2 },
         shadowOpacity: 0.06,
         shadowRadius: 6,
       }}
     >
-      {tabs.map((tab) => {
-        // Botón central flotante de agregar gasto
-        if (tab.isAdd) {
-          return (
-            <TouchableOpacity
-              key="btn-add"
-              activeOpacity={0.85}
-              onPress={() => onNav(4)}
-              className="-top-[18px] h-[54px] rounded-[27px] bg-primary items-center justify-center"
-              style={{
-                // Se eleva ligeramente sobre la barra
-                width: 54,
-                elevation: 6,
-                shadowColor: "#512DA8",
-                shadowOffset: { width: 0, height: 4 },
-                shadowOpacity: 0.35,
-                shadowRadius: 6,
-              }}
-            >
-              <Feather name="plus" size={28} color="#FFFFFF" />
-            </TouchableOpacity>
-          );
-        }
-
-        const isActive = active === tab.id;
-        const iconColor = isActive ? "#512DA8" : "#8A849C";
-        const textColor = isActive ? "#512DA8" : "#8A849C";
-
+      {pestanasVisibles.map((tab) => {
+        const route = state.routes.find((item) => item.name === tab.name);
+        if (!route) return null;
+        const selected = state.routes[state.index].key === route.key;
+        const isAdd = tab.name === "Gasto";
+        const color = isAdd ? "#fff" : selected ? "#512DA8" : "#6B6580";
+        const onPress = () => {
+          const event = navigation.emit({
+            type: "tabPress",
+            target: route.key,
+            canPreventDefault: true,
+          });
+          if (!selected && !event.defaultPrevented)
+            navigation.navigate(route.name, route.params);
+        };
         return (
-          <TouchableOpacity
-            key={tab.label}
-            activeOpacity={0.7}
-            onPress={() => onNav(tab.id)}
-            className="items-center justify-center min-w-[50px]"
+          <Pressable
+            key={route.key}
+            accessibilityRole="tab"
+            accessibilityState={{ selected }}
+            accessibilityLabel={isAdd ? "Registrar gasto" : tab.label}
+            onPress={onPress}
+            onLongPress={() =>
+              navigation.emit({ type: "tabLongPress", target: route.key })
+            }
+            hitSlop={4}
+            style={({ pressed }) => ({
+              flex: 1,
+              minHeight: 54,
+              alignItems: "center",
+              justifyContent: "center",
+              opacity: pressed ? 0.65 : 1,
+            })}
           >
-            <Feather name={tab.icon as any} size={22} color={iconColor} />
-            <Text
-              className="text-[11px] mt-[3px]"
-              style={{ color: textColor, fontWeight: isActive ? "700" : "500" }}
-            >
-              {tab.label}
-            </Text>
-          </TouchableOpacity>
+            {isAdd ? (
+              <View
+                className="bg-primary rounded-[27px] w-[54px] h-[54px] items-center justify-center"
+                style={{ marginTop: -18 }}
+              >
+                <Feather name="plus" size={28} color={color} />
+              </View>
+            ) : (
+              <>
+                <Feather name={tab.icon} size={22} color={color} />
+                <Text
+                  className="text-[11px] mt-[3px]"
+                  style={{ color, fontWeight: selected ? "700" : "500" }}
+                >
+                  {tab.label}
+                </Text>
+              </>
+            )}
+          </Pressable>
         );
       })}
     </View>

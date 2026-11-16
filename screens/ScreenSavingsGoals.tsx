@@ -1,6 +1,5 @@
 import React from "react";
 import { ScrollView, Text, View } from "react-native";
-import BottomNav from "../components/BottomNav";
 import ProgressBar from "../components/ProgressBar";
 
 export default function ScreenSavingsGoals({
@@ -37,7 +36,10 @@ export default function ScreenSavingsGoals({
 
   return (
     <View className="flex-1">
-      <ScrollView contentContainerStyle={{ padding: 20 }}>
+      <ScrollView
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={{ padding: 20 }}
+      >
         <Text className="text-[20px] font-bold mb-[16px]">Metas de ahorro</Text>
         <View className="gap-[12px]">
           {goals.map((g) => {
@@ -69,7 +71,6 @@ export default function ScreenSavingsGoals({
           })}
         </View>
       </ScrollView>
-      <BottomNav active={5} onNav={onNav} />
     </View>
   );
 }

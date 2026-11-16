@@ -1,6 +1,7 @@
 // screens/ScreenQuickExpense.tsx
 import { Feather } from "@expo/vector-icons";
-import React, { useEffect, useState } from "react";
+import { useIsFocused } from "@react-navigation/native";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -10,7 +11,6 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import BottomNav from "../components/BottomNav";
 import { supabase } from "../database/supabase";
 
 export default function ScreenQuickExpense({
@@ -18,6 +18,12 @@ export default function ScreenQuickExpense({
 }: {
   onNav: (i: number) => void;
 }) {
+  const isFocused = useIsFocused();
+  const focusedRef = useRef(isFocused);
+  focusedRef.current = isFocused;
+  const ultimaCarga = useRef(0);
+  const categoriasCargadas = useRef(false);
+  const categoriaSeleccionada = useRef<string | number | null>(null);
   const [crearCategoria, setCrearCategoria] = useState(false);
   const [nombreCategoria, setNombreCategoria] = useState("");
   const [creando, setCreando] = useState(false);
@@ -27,41 +33,51 @@ export default function ScreenQuickExpense({
   const [cargando, setCargando] = useState(true);
   const [guardando, setGuardando] = useState(false);
 
-  // 1. Cargar las categorías del usuario autenticado desde Supabase
-  useEffect(() => {
-    const cargarCategoriasUsuario = async () => {
-      try {
-        setCargando(true);
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
-
-        if (!user) {
-          setCats([]);
-          return;
-        }
-
-        const { data: categoriasDB, error } = await supabase
-          .from("categorias")
-          .select("*")
-          .eq("usuario_id", user.id)
-          .order("id", { ascending: true });
-
-        if (error) {
-          console.error("Error al obtener categorías:", error.message);
-          return;
-        }
-
-        setCats(categoriasDB || []);
-      } catch (err: any) {
-        console.error("Error inesperado:", err.message);
-      } finally {
-        setCargando(false);
+  // Refresca al entrar sin ocultar las categorías que ya están cargadas.
+  const cargarCategoriasUsuario = useCallback(async () => {
+    if (!focusedRef.current) return;
+    const solicitud = ++ultimaCarga.current;
+    if (!categoriasCargadas.current) setCargando(true);
+    try {
+      const {
+        data: { session },
+        error: errorSesion,
+      } = await supabase.auth.getSession();
+      if (errorSesion) throw errorSesion;
+      if (!session?.user) throw new Error("No hay una sesión activa.");
+      const { data, error } = await supabase
+        .from("categorias")
+        .select("id, nombre, icono, limite, color")
+        .eq("usuario_id", session.user.id)
+        .order("id", { ascending: true });
+      if (error) throw error;
+      if (!focusedRef.current || solicitud !== ultimaCarga.current) return;
+      const categorias = data || [];
+      const indice = categorias.findIndex(
+        (c) => c.id === categoriaSeleccionada.current,
+      );
+      const siguiente = indice >= 0 ? indice : 0;
+      setCats(categorias);
+      setSelected(siguiente);
+      categoriaSeleccionada.current = categorias[siguiente]?.id ?? null;
+      categoriasCargadas.current = true;
+    } catch (err: any) {
+      if (focusedRef.current && solicitud === ultimaCarga.current) {
+        console.error("Error al cargar categorías:", err.message);
       }
-    };
-
-    cargarCategoriasUsuario();
+    } finally {
+      if (focusedRef.current && solicitud === ultimaCarga.current)
+        setCargando(false);
+    }
   }, []);
+
+  useEffect(() => {
+    if (!isFocused) return;
+    cargarCategoriasUsuario();
+    return () => {
+      ultimaCarga.current += 1;
+    };
+  }, [isFocused, cargarCategoriasUsuario]);
 
   const guardarNuevaCategoria = async () => {
     const nombre = nombreCategoria.trim();
@@ -78,6 +94,7 @@ export default function ScreenQuickExpense({
         (c) => c.nombre.toLowerCase() === nombre.toLowerCase(),
       );
       if (existente >= 0) {
+        categoriaSeleccionada.current = cats[existente].id;
         setSelected(existente);
       } else {
         const { data, error } = await supabase
@@ -92,6 +109,8 @@ export default function ScreenQuickExpense({
           .select()
           .single();
         if (error) throw error;
+        ultimaCarga.current += 1;
+        categoriaSeleccionada.current = data.id;
         setSelected(cats.length);
         setCats([...cats, data]);
       }
@@ -147,7 +166,10 @@ export default function ScreenQuickExpense({
         return;
       }
 
-      // Vuelve al Dashboard tras registrar el gasto
+      // La pestaña conserva su estado: limpia el monto para no repetir el gasto.
+      setAmount("0");
+      setCrearCategoria(false);
+      setNombreCategoria("");
       onNav(2);
     } catch (err: any) {
       Alert.alert(
@@ -161,7 +183,10 @@ export default function ScreenQuickExpense({
 
   return (
     <View className="flex-1 bg-bg">
-      <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 100 }}>
+      <ScrollView
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={{ padding: 20, paddingBottom: 24 }}
+      >
         {/* Cabecera */}
         <View className="flex-row justify-between items-center mb-[20px]">
           <Text className="text-[20px] font-bold text-text">Nuevo gasto</Text>
@@ -191,7 +216,10 @@ export default function ScreenQuickExpense({
               cats.map((c, i) => (
                 <TouchableOpacity
                   key={c.id || c.nombre}
-                  onPress={() => setSelected(i)}
+                  onPress={() => {
+                    categoriaSeleccionada.current = c.id;
+                    setSelected(i);
+                  }}
                   className="w-[31%] py-[12px] rounded-[12px] border-[1px] items-center"
                   style={{
                     borderColor: selected === i ? "#512DA8" : "#E8E4F0",
@@ -284,7 +312,6 @@ export default function ScreenQuickExpense({
       </ScrollView>
 
       {/* Navegación inferior */}
-      <BottomNav active={4} onNav={onNav} />
     </View>
   );
 }

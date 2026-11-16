@@ -1,6 +1,5 @@
 import React from "react";
 import { ScrollView, Text, View } from "react-native";
-import BottomNav from "../components/BottomNav";
 
 export default function ScreenRecurring({
   onNav,
@@ -16,7 +15,10 @@ export default function ScreenRecurring({
 
   return (
     <View className="flex-1">
-      <ScrollView contentContainerStyle={{ padding: 20 }}>
+      <ScrollView
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={{ padding: 20 }}
+      >
         <Text className="text-[20px] font-bold mb-[16px]">Gastos Fijos</Text>
         <View className="gap-[10px]">
           {recurring.map((r) => (
@@ -40,7 +42,6 @@ export default function ScreenRecurring({
           ))}
         </View>
       </ScrollView>
-      <BottomNav active={7} onNav={onNav} />
     </View>
   );
 }

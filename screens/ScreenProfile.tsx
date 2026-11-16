@@ -1,19 +1,20 @@
 // screens/ScreenProfile.tsx
 import { Feather } from "@expo/vector-icons";
-import React, { useEffect, useState } from "react";
+import { useIsFocused } from "@react-navigation/native";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
   Modal,
   Platform,
+  Pressable,
   ScrollView,
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
-import BottomNav from "../components/BottomNav";
 import { supabase } from "../database/supabase";
 
 export default function ScreenProfile({
@@ -21,6 +22,11 @@ export default function ScreenProfile({
 }: {
   onNav: (i: number) => void;
 }) {
+  const isFocused = useIsFocused();
+  const focusedRef = useRef(isFocused);
+  focusedRef.current = isFocused;
+  const ultimaCarga = useRef(0);
+  const perfilCargado = useRef(false);
   const [nombre, setNombre] = useState("Usuario");
   const [email, setEmail] = useState("");
   const [sueldo, setSueldo] = useState("0");
@@ -29,6 +35,8 @@ export default function ScreenProfile({
 
   // Estados del modal de edición
   const [modalVisible, setModalVisible] = useState(false);
+  const modalVisibleRef = useRef(modalVisible);
+  modalVisibleRef.current = modalVisible;
   const [editNombre, setEditNombre] = useState("");
   const [editSueldo, setEditSueldo] = useState("");
   const [editDiaPago, setEditDiaPago] = useState("1");
@@ -36,60 +44,60 @@ export default function ScreenProfile({
 
   const dias = [1, 5, 7, 10, 14, 15, 28, 30];
 
-  // 1. Cargar datos directamente desde Supabase
-  const cargarDatosPerfil = async () => {
+  // Refresca al recuperar el foco, conservando el perfil y los borradores.
+  const cargarDatosPerfil = useCallback(async () => {
+    if (!focusedRef.current) return;
+    const solicitud = ++ultimaCarga.current;
+    if (!perfilCargado.current) setCargando(true);
     try {
-      setCargando(true);
       const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      if (!user) {
-        setCargando(false);
-        return;
-      }
-
-      setEmail(user.email || "");
-
-      // Consulta en la tabla perfiles de Supabase
+        data: { session },
+        error: errorSesion,
+      } = await supabase.auth.getSession();
+      if (errorSesion) throw errorSesion;
+      if (!session?.user) throw new Error("No hay una sesión activa.");
+      const user = session.user;
       const { data: perfil, error } = await supabase
         .from("perfiles")
         .select("nombre, sueldo, dia_pago")
         .eq("id", user.id)
         .single();
-
-      if (perfil) {
-        const nom =
-          perfil.nombre ||
-          user.user_metadata?.nombre ||
-          user.email?.split("@")[0] ||
-          "Usuario";
-        const sue = (perfil.sueldo || 0).toString();
-        const dia = (perfil.dia_pago || 1).toString();
-
-        setNombre(nom);
-        setSueldo(sue);
-        setDiaPago(dia);
-
+      if (error) throw error;
+      if (!focusedRef.current || solicitud !== ultimaCarga.current) return;
+      const nom =
+        perfil?.nombre ||
+        user.user_metadata?.nombre ||
+        user.email?.split("@")[0] ||
+        "Usuario";
+      const sue = (perfil?.sueldo || 0).toString();
+      const dia = (perfil?.dia_pago || 1).toString();
+      setEmail(user.email || "");
+      setNombre(nom);
+      setSueldo(sue);
+      setDiaPago(dia);
+      if (!modalVisibleRef.current) {
         setEditNombre(nom);
         setEditSueldo(sue);
         setEditDiaPago(dia);
-      } else {
-        const nom =
-          user.user_metadata?.nombre || user.email?.split("@")[0] || "Usuario";
-        setNombre(nom);
-        setEditNombre(nom);
       }
+      perfilCargado.current = true;
     } catch (err: any) {
-      console.error("Error al cargar perfil:", err.message);
+      if (focusedRef.current && solicitud === ultimaCarga.current) {
+        console.error("Error al cargar perfil:", err.message);
+      }
     } finally {
-      setCargando(false);
+      if (focusedRef.current && solicitud === ultimaCarga.current)
+        setCargando(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
+    if (!isFocused) return;
     cargarDatosPerfil();
-  }, []);
+    return () => {
+      ultimaCarga.current += 1;
+    };
+  }, [isFocused, cargarDatosPerfil]);
 
   // 2. Guardar modificaciones directamente en Supabase
   const handleGuardarCambios = async () => {
@@ -134,7 +142,10 @@ export default function ScreenProfile({
         return;
       }
 
-      // Refrescar estados locales
+      // Descarta una lectura anterior que pudiera reemplazar lo recién guardado.
+      ultimaCarga.current += 1;
+      perfilCargado.current = true;
+      setCargando(false);
       setNombre(editNombre.trim());
       setSueldo(sueldoNum.toString());
       setDiaPago(editDiaPago);
@@ -155,7 +166,11 @@ export default function ScreenProfile({
         text: "Salir",
         style: "destructive",
         onPress: async () => {
-          await supabase.auth.signOut();
+          const { error } = await supabase.auth.signOut();
+          if (error) {
+            Alert.alert("No se pudo cerrar sesión", error.message);
+            return;
+          }
           onNav(0);
         },
       },
@@ -164,7 +179,10 @@ export default function ScreenProfile({
 
   return (
     <View className="flex-1 bg-bg">
-      <ScrollView contentContainerStyle={{ padding: 24, paddingBottom: 110 }}>
+      <ScrollView
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={{ padding: 24, paddingBottom: 24 }}
+      >
         {/* Cabecera */}
         <View className="flex-row justify-between items-center mb-[20px]">
           <Text className="text-[24px] font-bold text-text">Mi Perfil</Text>
@@ -237,6 +255,35 @@ export default function ScreenProfile({
           </View>
         </View>
 
+        <View className="bg-card rounded-[16px] mb-[24px]">
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Abrir gastos fijos"
+            onPress={() => onNav(7)}
+            className="flex-row items-center p-[16px] gap-[12px] border-b-[1px] border-bg"
+            style={({ pressed }) => ({ opacity: pressed ? 0.65 : 1 })}
+          >
+            <Feather name="repeat" size={20} color="#512DA8" />
+            <Text className="flex-1 text-text font-semibold text-[15px]">
+              Gastos fijos
+            </Text>
+            <Feather name="chevron-right" size={20} color="#6B6580" />
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Abrir notificaciones"
+            onPress={() => onNav(6)}
+            className="flex-row items-center p-[16px] gap-[12px]"
+            style={({ pressed }) => ({ opacity: pressed ? 0.65 : 1 })}
+          >
+            <Feather name="bell" size={20} color="#512DA8" />
+            <Text className="flex-1 text-text font-semibold text-[15px]">
+              Notificaciones
+            </Text>
+            <Feather name="chevron-right" size={20} color="#6B6580" />
+          </Pressable>
+        </View>
+
         {/* Cerrar Sesión */}
         <TouchableOpacity
           onPress={handleCerrarSesion}
@@ -250,7 +297,12 @@ export default function ScreenProfile({
       </ScrollView>
 
       {/* Modal para Editar Datos */}
-      <Modal visible={modalVisible} animationType="slide" transparent>
+      <Modal
+        visible={modalVisible && isFocused}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setModalVisible(false)}
+      >
         <KeyboardAvoidingView
           behavior={Platform.OS === "ios" ? "padding" : "height"}
           className="flex-1 justify-end"
@@ -266,7 +318,10 @@ export default function ScreenProfile({
               </TouchableOpacity>
             </View>
 
-            <ScrollView showsVerticalScrollIndicator={false}>
+            <ScrollView
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+            >
               {/* Campo Nombre */}
               <Text className="text-[12px] font-semibold text-text-secondary mb-[6px]">
                 NOMBRE
@@ -331,8 +386,6 @@ export default function ScreenProfile({
           </View>
         </KeyboardAvoidingView>
       </Modal>
-
-      <BottomNav active={8} onNav={onNav} />
     </View>
   );
 }

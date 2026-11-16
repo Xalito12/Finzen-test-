@@ -1,6 +1,7 @@
 // screens/ScreenCategories.tsx
 import { Feather } from "@expo/vector-icons";
-import React, { useEffect, useRef, useState } from "react";
+import { useIsFocused } from "@react-navigation/native";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Alert,
   Modal,
@@ -10,8 +11,11 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import BottomNav from "../components/BottomNav";
 import { supabase } from "../database/supabase";
+import {
+  consultarCategorias,
+  resumirGastos,
+} from "../database/consultasFinanzas";
 
 const categoriasSugeridas = [
   { nombre: "Alimentación", icono: "🍔", limite: 160000, color: "#7E57C2" },
@@ -31,6 +35,10 @@ export default function ScreenCategories({
 }: {
   onNav: (i: number) => void;
 }) {
+  const isFocused = useIsFocused();
+  const focusedRef = useRef(isFocused);
+  focusedRef.current = isFocused;
+  const ultimaCarga = useRef(0);
   const [mostrarSugerencias, setMostrarSugerencias] = useState(false);
   const [agregando, setAgregando] = useState(false);
   const agregandoRef = useRef(false);
@@ -45,58 +53,30 @@ export default function ScreenCategories({
   const [limiteNuevo, setLimiteNuevo] = useState("");
 
   // 1. Cargar las categorías y gastos de ESTE usuario desde Supabase
-  const cargarCategorias = async () => {
+  const cargarCategorias = useCallback(async () => {
+    if (!focusedRef.current) return;
+    const solicitud = ++ultimaCarga.current;
     try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      if (!user) {
-        setListaCategorias([]);
-        return;
-      }
-
-      // Obtener categorías del usuario
-      const { data: categoriasDB, error: errCat } = await supabase
-        .from("categorias")
-        .select("*")
-        .eq("usuario_id", user.id)
-        .order("id", { ascending: true });
-
-      if (errCat) throw errCat;
-
-      // Obtener gastos de este usuario
-      const { data: gastosDB } = await supabase
-        .from("gastos")
-        .select("*")
-        .eq("usuario_id", user.id);
-
-      const listaGastos = gastosDB || [];
+      const { categorias: categoriasDB, gastos: listaGastos } =
+        await consultarCategorias();
+      if (!focusedRef.current || solicitud !== ultimaCarga.current) return;
+      const resumen = resumirGastos(listaGastos);
       let conteoAlerta = 0;
       let conteoSobrepasado = 0;
       let categoriasConTotales = [];
 
       for (let i = 0; i < (categoriasDB || []).length; i++) {
-        let categoriaActual = { ...categoriasDB[i] };
-        let sumaGastos = 0;
+        const categoriaActual = { ...categoriasDB[i], gastado: 0 };
+        categoriaActual.gastado = resumen.gastoCategoria(
+          categoriaActual.nombre,
+        );
 
-        for (let j = 0; j < listaGastos.length; j++) {
-          if (
-            listaGastos[j].categoria === categoriaActual.nombre ||
-            (categoriaActual.nombre === "Alimentación" &&
-              listaGastos[j].categoria === "Comida")
-          ) {
-            let montoGasto = parseInt(listaGastos[j].monto);
-            if (!isNaN(montoGasto)) sumaGastos += montoGasto;
-          }
-        }
-
-        categoriaActual.gastado = sumaGastos;
-
-        let limiteNum = parseInt(categoriaActual.limite);
+        let limiteNum = Number(categoriaActual.limite);
         if (isNaN(limiteNum) || limiteNum <= 0) limiteNum = 1;
 
-        let porcentaje = Math.round((sumaGastos / limiteNum) * 100);
+        let porcentaje = Math.round(
+          (categoriaActual.gastado / limiteNum) * 100,
+        );
 
         if (porcentaje > 100) conteoSobrepasado += 1;
         else if (porcentaje >= 80) conteoAlerta += 1;
@@ -108,13 +88,19 @@ export default function ScreenCategories({
       setEnAlerta(conteoAlerta);
       setSobrepasadas(conteoSobrepasado);
     } catch (err: any) {
-      console.error("Error al cargar categorías de Supabase:", err.message);
+      if (focusedRef.current && solicitud === ultimaCarga.current) {
+        console.error("Error al cargar categorías de Supabase:", err.message);
+      }
     }
-  };
+  }, []);
 
   useEffect(() => {
+    if (!isFocused) return;
     cargarCategorias();
-  }, []);
+    return () => {
+      ultimaCarga.current += 1;
+    };
+  }, [isFocused, cargarCategorias]);
 
   // 2. Guardar o actualizar la categoría en Supabase
   const guardarCategoria = async () => {
@@ -267,7 +253,10 @@ export default function ScreenCategories({
 
   return (
     <View className="flex-1 bg-bg">
-      <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 100 }}>
+      <ScrollView
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={{ padding: 20, paddingBottom: 24 }}
+      >
         <View className="flex-row justify-between items-center mb-[20px]">
           <Text className="text-[24px] font-black text-text">Categorías</Text>
           <TouchableOpacity
@@ -495,7 +484,7 @@ export default function ScreenCategories({
         </View>
       </ScrollView>
       <Modal
-        visible={mostrarSugerencias}
+        visible={mostrarSugerencias && isFocused}
         transparent
         animationType="slide"
         onRequestClose={() => {
@@ -523,7 +512,7 @@ export default function ScreenCategories({
             <Text className="text-text-secondary mb-[12px]">
               Toca una para agregarla. Puedes editar su límite después.
             </Text>
-            <ScrollView>
+            <ScrollView keyboardShouldPersistTaps="handled">
               {categoriasSugeridas
                 .filter(
                   (c) =>
@@ -572,7 +561,6 @@ export default function ScreenCategories({
           </View>
         </View>
       </Modal>
-      <BottomNav active={3} onNav={onNav} />
     </View>
   );
 }
