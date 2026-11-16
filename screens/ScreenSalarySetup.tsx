@@ -1,7 +1,8 @@
 import { Feather } from "@expo/vector-icons";
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 
 import {
+  ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
   Platform,
@@ -14,103 +15,88 @@ import {
 import { supabase } from "../database/supabase";
 
 export default function ScreenSalarySetup({ onNext }: { onNext: () => void }) {
-  const [sueldo, setSueldo] = useState("850000");
-  const [diaPago, setDiaPago] = useState(1);
+  const [sueldo, setSueldo] = useState("");
+  const [diaPago, setDiaPago] = useState("1");
+  const [guardando, setGuardando] = useState(false);
+  const guardandoRef = useRef(false);
 
-  const dias = [1, 5, 7, 10, 14, 15, 28, 30];
+  const dias = [1, 5, 10, 15, 20, 25, 28, 30, 31];
 
   const handleGuardarConfiguracion = async () => {
-    const montoLimpio = parseInt(sueldo.replace(/[^0-9]/g, ""));
-
-    if (isNaN(montoLimpio) || montoLimpio <= 0) {
-      Alert.alert("Atención", "Por favor ingresa un sueldo válido.");
+    if (guardandoRef.current) return;
+    const textoSueldo = sueldo.trim().replace(/[.$\s]/g, "");
+    const monto = Number(textoSueldo);
+    const dia = Number(diaPago);
+    if (
+      !/^\d+$/.test(textoSueldo) ||
+      !Number.isSafeInteger(monto) ||
+      monto <= 0
+    ) {
+      Alert.alert(
+        "Revisa el sueldo",
+        "Ingresa un sueldo mensual válido en pesos chilenos, mayor que cero.",
+      );
       return;
     }
-
-    // Obtener usuario autenticado
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      Alert.alert("Error", "Sesión no encontrada.");
+    if (
+      !/^\d{1,2}$/.test(diaPago.trim()) ||
+      !Number.isInteger(dia) ||
+      dia < 1 ||
+      dia > 31
+    ) {
+      Alert.alert(
+        "Revisa el día de pago",
+        "El día debe ser un número entre 1 y 31.",
+      );
       return;
     }
-
-    // Las categorías iniciales pertenecen a la configuración inicial, no a la lectura.
-    const { data: perfil, error: errorPerfil } = await supabase
-      .from("perfiles")
-      .select("sueldo")
-      .eq("id", user.id)
-      .single();
-    if (errorPerfil) {
-      Alert.alert("Error al cargar configuración", errorPerfil.message);
-      return;
-    }
-    if (!perfil.sueldo || Number(perfil.sueldo) <= 0) {
-      const { data: existentes, error: errorCategorias } = await supabase
-        .from("categorias")
-        .select("id")
-        .eq("usuario_id", user.id)
-        .limit(1);
-      if (errorCategorias) {
-        Alert.alert("Error al cargar categorías", errorCategorias.message);
-        return;
+    guardandoRef.current = true;
+    setGuardando(true);
+    try {
+      const {
+        data: { session },
+        error: errorSesion,
+      } = await supabase.auth.getSession();
+      if (errorSesion) throw errorSesion;
+      if (!session?.user)
+        throw new Error("Inicia sesión para guardar tu presupuesto.");
+      const user = session.user;
+      const nombre =
+        user.user_metadata?.nombre || user.email?.split("@")[0] || "Usuario";
+      // Guardar una cuenta no crea categorías. El usuario elige la primera
+      // durante el tutorial y las cuentas existentes conservan sus datos.
+      const { data: perfil, error } = await supabase
+        .from("perfiles")
+        .upsert({
+          id: user.id,
+          nombre,
+          sueldo: monto,
+          dia_pago: dia,
+        })
+        .select("id, sueldo, dia_pago")
+        .single();
+      if (error) throw error;
+      if (
+        !perfil ||
+        perfil.id !== user.id ||
+        Number(perfil.sueldo) !== monto ||
+        Number(perfil.dia_pago) !== dia
+      ) {
+        throw new Error(
+          "No se pudo confirmar la configuración. Inténtalo nuevamente.",
+        );
       }
-      if (existentes.length === 0) {
-        const { error: errorIniciales } = await supabase
-          .from("categorias")
-          .insert([
-            {
-              usuario_id: user.id,
-              nombre: "Alimentación",
-              icono: "🍔",
-              limite: 160000,
-              color: "#7E57C2",
-            },
-            {
-              usuario_id: user.id,
-              nombre: "Transporte",
-              icono: "🚗",
-              limite: 80000,
-              color: "#F9A825",
-            },
-            {
-              usuario_id: user.id,
-              nombre: "Compras",
-              icono: "🛍️",
-              limite: 130000,
-              color: "#C62828",
-            },
-            {
-              usuario_id: user.id,
-              nombre: "Salud",
-              icono: "❤️",
-              limite: 55000,
-              color: "#2E7D32",
-            },
-          ]);
-        if (errorIniciales) {
-          Alert.alert("Error al crear categorías", errorIniciales.message);
-          return;
-        }
-      }
+      onNext();
+    } catch (error: unknown) {
+      const mensaje =
+        error && typeof error === "object" && "message" in error
+          ? String(error.message)
+          : "No se pudo guardar la configuración.";
+      Alert.alert("No se pudo guardar", mensaje);
+    } finally {
+      guardandoRef.current = false;
+      setGuardando(false);
     }
-
-    // Actualizar en Supabase
-    const { error } = await supabase
-      .from("perfiles")
-      .update({
-        sueldo: montoLimpio,
-        dia_pago: diaPago,
-      })
-      .eq("id", user.id);
-
-    if (error) {
-      Alert.alert("Error al guardar", error.message);
-      return;
-    }
-
-    onNext(); // Lleva al Dashboard (pantalla 2)
   };
 
   return (
@@ -119,6 +105,7 @@ export default function ScreenSalarySetup({ onNext }: { onNext: () => void }) {
       className="flex-1 bg-bg"
     >
       <ScrollView
+        keyboardShouldPersistTaps="handled"
         contentContainerStyle={{
           flexGrow: 1,
           padding: 24,
@@ -132,16 +119,17 @@ export default function ScreenSalarySetup({ onNext }: { onNext: () => void }) {
           </View>
 
           <Text className="text-[13px] text-text-secondary font-semibold mb-[4px]">
-            Paso 1 de 2
+            Configuración inicial
           </Text>
           <Text className="text-[26px] font-extrabold text-text mb-[12px]">
-            Configura tu sueldo mensual
+            Configura tu presupuesto
           </Text>
 
-          {/* Barra de progreso */}
-          <View className="h-[6px] bg-border rounded-[99px] mb-[30px] overflow-hidden">
-            <View className="w-[50%] h-[100%] bg-primary rounded-[99px]" />
-          </View>
+          <Text className="text-[14px] text-text-secondary mb-[24px]">
+            Define tu ingreso y día de pago. Después crearás tu primera
+            categoría y conocerás las secciones de FinZen con una guía paso a
+            paso.
+          </Text>
 
           {/* Input Sueldo */}
           <Text className="text-[13px] font-semibold text-text-secondary mb-[8px]">
@@ -154,6 +142,8 @@ export default function ScreenSalarySetup({ onNext }: { onNext: () => void }) {
             <TextInput
               value={sueldo}
               onChangeText={setSueldo}
+              editable={!guardando}
+              accessibilityLabel="Sueldo mensual neto"
               keyboardType="numeric"
               placeholder="0"
               placeholderTextColor="#8A849C"
@@ -168,11 +158,15 @@ export default function ScreenSalarySetup({ onNext }: { onNext: () => void }) {
           </Text>
           <View className="flex-row flex-wrap gap-[10px] mb-[30px]">
             {dias.map((d) => {
-              const seleccionado = diaPago === d;
+              const seleccionado = Number(diaPago) === d;
               return (
                 <TouchableOpacity
                   key={d}
-                  onPress={() => setDiaPago(d)}
+                  disabled={guardando}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Día de pago ${d}`}
+                  accessibilityState={{ selected: seleccionado }}
+                  onPress={() => setDiaPago(String(d))}
                   className="w-[52px] h-[52px] rounded-[12px] items-center justify-center border-border"
                   style={{
                     backgroundColor: seleccionado ? "#512DA8" : "#fff",
@@ -189,14 +183,36 @@ export default function ScreenSalarySetup({ onNext }: { onNext: () => void }) {
               );
             })}
           </View>
+          <Text className="text-[13px] text-text-secondary mb-[8px]">
+            O escribe otro día del mes (1 al 31)
+          </Text>
+          <TextInput
+            value={diaPago}
+            onChangeText={setDiaPago}
+            keyboardType="number-pad"
+            maxLength={2}
+            editable={!guardando}
+            accessibilityLabel="Día de pago del 1 al 31"
+            className="bg-card rounded-[12px] px-[16px] h-[48px] text-text mb-[24px]"
+          />
         </View>
 
         {/* Botón Continuar */}
         <TouchableOpacity
+          disabled={guardando}
+          accessibilityRole="button"
+          accessibilityLabel="Guardar presupuesto y continuar"
+          accessibilityState={{ disabled: guardando }}
           onPress={handleGuardarConfiguracion}
           className="bg-primary h-[52px] rounded-[14px] items-center justify-center mb-[10px]"
         >
-          <Text className="text-card font-bold text-[16px]">Continuar →</Text>
+          {guardando ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text className="text-card font-bold text-[16px]">
+              Guardar y continuar
+            </Text>
+          )}
         </TouchableOpacity>
       </ScrollView>
     </KeyboardAvoidingView>

@@ -14,6 +14,7 @@ import ScreenQuickExpense from "../screens/ScreenQuickExpense";
 import ScreenRecurring from "../screens/ScreenRecurring";
 import ScreenSavingsGoals from "../screens/ScreenSavingsGoals";
 import { rutasAnteriores, type RutasFinzen } from "./rutas";
+import { TutorialProvider } from "../tutorial/TutorialProvider";
 
 const Tabs = createBottomTabNavigator<RutasFinzen>();
 const SalirContext = createContext<() => void>(() => {});
@@ -88,28 +89,36 @@ function GastosFijos() {
   );
 }
 
-export default function FinzenTabs({ onSalir }: { onSalir: () => void }) {
+export default function FinzenTabs({
+  usuarioId,
+  onSalir,
+}: {
+  usuarioId: string;
+  onSalir: () => void;
+}) {
   return (
-    <SalirContext.Provider value={onSalir}>
-      <Tabs.Navigator
-        initialRouteName="Inicio"
-        backBehavior="history"
-        detachInactiveScreens
-        tabBar={(props) => <BottomNav {...props} />}
-        screenOptions={{
-          headerShown: false,
-          lazy: true,
-          sceneStyle: { backgroundColor: "#F5F3FA" },
-        }}
-      >
-        <Tabs.Screen name="Inicio" component={Inicio} />
-        <Tabs.Screen name="Categorias" component={Categorias} />
-        <Tabs.Screen name="Gasto" component={Gasto} />
-        <Tabs.Screen name="Metas" component={Metas} />
-        <Tabs.Screen name="Perfil" component={Perfil} />
-        <Tabs.Screen name="Notificaciones" component={Notificaciones} />
-        <Tabs.Screen name="GastosFijos" component={GastosFijos} />
-      </Tabs.Navigator>
-    </SalirContext.Provider>
+    <TutorialProvider usuarioId={usuarioId}>
+      <SalirContext.Provider value={onSalir}>
+        <Tabs.Navigator
+          initialRouteName="Inicio"
+          backBehavior="history"
+          detachInactiveScreens
+          tabBar={(props) => <BottomNav {...props} />}
+          screenOptions={{
+            headerShown: false,
+            lazy: true,
+            sceneStyle: { backgroundColor: "#F5F3FA" },
+          }}
+        >
+          <Tabs.Screen name="Inicio" component={Inicio} />
+          <Tabs.Screen name="Categorias" component={Categorias} />
+          <Tabs.Screen name="Gasto" component={Gasto} />
+          <Tabs.Screen name="Metas" component={Metas} />
+          <Tabs.Screen name="Perfil" component={Perfil} />
+          <Tabs.Screen name="Notificaciones" component={Notificaciones} />
+          <Tabs.Screen name="GastosFijos" component={GastosFijos} />
+        </Tabs.Navigator>
+      </SalirContext.Provider>
+    </TutorialProvider>
   );
 }

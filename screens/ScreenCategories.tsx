@@ -1,6 +1,8 @@
 // screens/ScreenCategories.tsx
 import { Feather } from "@expo/vector-icons";
 import { useIsFocused } from "@react-navigation/native";
+import TutorialCard from "../tutorial/TutorialCard";
+import { useTutorial } from "../tutorial/TutorialProvider";
 import React, {
   useCallback,
   useEffect,
@@ -59,6 +61,7 @@ export default function ScreenCategories({
 }: {
   onNav: (i: number) => void;
 }) {
+  const { notificarAccion, activo: tutorialActivo } = useTutorial();
   const isFocused = useIsFocused();
   const focusedRef = useRef(isFocused);
   focusedRef.current = isFocused;
@@ -148,6 +151,10 @@ export default function ScreenCategories({
     };
   }, [isFocused, cargarCategorias]);
 
+  useEffect(() => {
+    if (isFocused) notificarAccion("categorias_abiertas");
+  }, [isFocused, tutorialActivo, notificarAccion]);
+
   const nombreEnEliminacion = (nombre: string) =>
     [...eliminaciones.current.values()].some(
       (c) => c.nombre.trim().toLowerCase() === nombre.trim().toLowerCase(),
@@ -155,6 +162,7 @@ export default function ScreenCategories({
 
   // 2. Guardar o actualizar la categoría en Supabase
   const guardarCategoria = async () => {
+    const esNueva = idEditar === 0;
     if (nombreEnEliminacion(nombreNuevo)) {
       Alert.alert(
         "Un momento",
@@ -219,6 +227,10 @@ export default function ScreenCategories({
       setIdEditar(0);
       setMostrarFormulario(false);
       cargarCategorias();
+      if (esNueva) {
+        const destino = notificarAccion("categoria_creada");
+        if (destino !== null) onNav(destino);
+      }
     } catch (err: any) {
       Alert.alert(
         "Error inesperado",
@@ -233,6 +245,7 @@ export default function ScreenCategories({
     if (agregandoRef.current || nombreEnEliminacion(categoria.nombre)) return;
     agregandoRef.current = true;
     setAgregando(true);
+    let creada = false;
     try {
       const {
         data: { user },
@@ -255,9 +268,14 @@ export default function ScreenCategories({
           .from("categorias")
           .insert({ ...categoria, usuario_id: user.id });
         if (error) throw error;
+        creada = true;
       }
       await cargarCategorias();
       setMostrarSugerencias(false);
+      if (creada) {
+        const destino = notificarAccion("categoria_creada");
+        if (destino !== null) onNav(destino);
+      }
     } catch (error: any) {
       Alert.alert("Error al agregar categoría", error.message);
     } finally {
@@ -377,6 +395,17 @@ export default function ScreenCategories({
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{ padding: 20, paddingBottom: 24 }}
       >
+        <TutorialCard
+          pantalla="Categorias"
+          onNav={onNav}
+          puedeContinuar={listaCategorias.length > 0}
+          onAccion={(accion) => {
+            if (accion === "crear_categoria") {
+              setMostrarFormulario(false);
+              setMostrarSugerencias(true);
+            }
+          }}
+        />
         <View className="flex-row justify-between items-center mb-[20px]">
           <Text className="text-[24px] font-black text-text">Categorías</Text>
           <TouchableOpacity

@@ -142,7 +142,11 @@ export default function App() {
       break;
     case "Aplicacion":
       contenido = usuario ? (
-        <FinzenTabs key={usuario} onSalir={volverABienvenida} />
+        <FinzenTabs
+          key={usuario}
+          usuarioId={usuario}
+          onSalir={volverABienvenida}
+        />
       ) : (
         <ActivityIndicator color="#512DA8" />
       );

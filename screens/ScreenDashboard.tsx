@@ -28,6 +28,7 @@ import { calcularEstadoPresupuesto } from "../models/estadoPresupuesto";
 import { generarNotificaciones } from "../models/notificaciones";
 import { listarMetas } from "../database/metasService";
 import { confirmarEliminacion } from "../utils/confirmarEliminacion";
+import TutorialCard from "../tutorial/TutorialCard";
 
 interface CategoriaInicio {
   id: number | string;
@@ -109,6 +110,8 @@ export default function ScreenDashboard({
   const [idEditar, setIdEditar] = useState<GastoResumen["id"] | null>(null);
   const [montoEditar, setMontoEditar] = useState("");
 
+  const listaRef = useRef<FlatList<GastoResumen>>(null);
+  const posicionGastos = useRef(0);
   const ultimaCarga = useRef(0);
   const gastosActuales = useRef(listaGastos);
   gastosActuales.current = listaGastos;
@@ -345,7 +348,20 @@ export default function ScreenDashboard({
           cargados.
         </Text>
       )}
+      <TutorialCard
+        pantalla="Inicio"
+        onNav={onNav}
+        onAccion={(accion) => {
+          if (accion === "ver_gastos") {
+            listaRef.current?.scrollToOffset({
+              offset: Math.max(0, posicionGastos.current - 12),
+              animated: true,
+            });
+          }
+        }}
+      />
       <FlatList<GastoResumen>
+        ref={listaRef}
         data={listaGastos}
         keyExtractor={(gasto) => String(gasto.id)}
         renderItem={({ item }) => (
@@ -519,6 +535,27 @@ export default function ScreenDashboard({
             </View>
 
             <View className="gap-[10px] mb-[20px]">
+              {categoriasDinamicas.length === 0 && (
+                <View className="bg-card rounded-[14px] p-[16px] border-[1px] border-border">
+                  <Text className="text-text font-semibold">
+                    No hay categorías disponibles.
+                  </Text>
+                  <Text className="text-text-secondary text-[13px] mt-[6px]">
+                    Crea tu primera categoría para organizar los gastos y
+                    definir sus límites.
+                  </Text>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Crear mi primera categoría"
+                    onPress={() => onNav(3)}
+                    className="py-[12px] mt-[4px]"
+                  >
+                    <Text className="text-primary font-bold">
+                      Ir a Categorías
+                    </Text>
+                  </Pressable>
+                </View>
+              )}
               {categoriasDinamicas.map((c) => {
                 const p = Math.round((c.spent / c.limit) * 100);
                 const colorBarra =
@@ -545,7 +582,12 @@ export default function ScreenDashboard({
               })}
             </View>
 
-            <View className="bg-card p-[14px] rounded-t-[14px]">
+            <View
+              onLayout={({ nativeEvent }) => {
+                posicionGastos.current = nativeEvent.layout.y;
+              }}
+              className="bg-card p-[14px] rounded-t-[14px]"
+            >
               <Text className="text-[16px] font-bold">Gestión de Gastos</Text>
             </View>
           </>

@@ -1,6 +1,6 @@
 // screens/ScreenRegister.tsx
 import { Feather } from "@expo/vector-icons";
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -25,8 +25,10 @@ export default function ScreenRegister({
   const [confirmPassword, setConfirmPassword] = useState("");
   const [cargando, setCargando] = useState(false);
   const [verPassword, setVerPassword] = useState(false);
+  const registroEnCurso = useRef(false);
 
   const handleRegistro = async () => {
+    if (registroEnCurso.current) return;
     if (!nombre.trim() || !email.trim() || !password.trim()) {
       Alert.alert("Atención", "Por favor completa todos los campos.");
       return;
@@ -42,6 +44,7 @@ export default function ScreenRegister({
       return;
     }
 
+    registroEnCurso.current = true;
     try {
       setCargando(true);
       // Pasamos 'nombre' en options.data para que quede en auth.users
@@ -49,7 +52,7 @@ export default function ScreenRegister({
         email: email.trim(),
         password: password,
         options: {
-          data: { nombre: nombre.trim() },
+          data: { nombre: nombre.trim(), finzen_tutorial_pendiente: true },
         },
       });
 
@@ -58,22 +61,40 @@ export default function ScreenRegister({
         return;
       }
 
-      if (data?.user) {
-        // Insertar el perfil en Supabase
-        await supabase.from("perfiles").upsert({
+      if (!data?.session || !data.user) {
+        Alert.alert(
+          "Revisa tu correo",
+          "Si el registro se completó, recibirás un enlace para confirmar tu correo. Después inicia sesión para configurar tu presupuesto y comenzar la guía.",
+          [{ text: "Ir a iniciar sesión", onPress: () => onNav(10) }],
+        );
+        return;
+      }
+
+      // Solo se escribe con una sesión autenticada. Configuración podrá
+      // recuperar el perfil con un upsert si esta preparación inicial falla.
+      const { data: perfil, error: errorPerfil } = await supabase
+        .from("perfiles")
+        .upsert({
           id: data.user.id,
           nombre: nombre.trim(),
           sueldo: 0,
           dia_pago: 1,
-        });
-
-        Alert.alert("¡Bienvenido!", "Tu cuenta ha sido creada exitosamente.", [
-          { text: "Continuar", onPress: () => onNav(1) }, // Lleva a configurar sueldo
-        ]);
+        })
+        .select("id")
+        .single();
+      if (errorPerfil || !perfil) {
+        Alert.alert(
+          "Completa tu configuración",
+          "Tu cuenta tiene una sesión activa, pero no se pudo preparar el perfil. Al guardar tu presupuesto volveremos a intentarlo.",
+          [{ text: "Configurar presupuesto", onPress: () => onNav(1) }],
+        );
+        return;
       }
+      onNav(1);
     } catch (err: any) {
       Alert.alert("Error inesperado", err.message || "Ocurrió un error.");
     } finally {
+      registroEnCurso.current = false;
       setCargando(false);
     }
   };
@@ -84,6 +105,7 @@ export default function ScreenRegister({
       className="flex-1 bg-bg"
     >
       <ScrollView
+        keyboardShouldPersistTaps="handled"
         contentContainerStyle={{
           flexGrow: 1,
           justifyContent: "center",
@@ -115,6 +137,8 @@ export default function ScreenRegister({
               placeholderTextColor="#8A849C"
               value={nombre}
               onChangeText={setNombre}
+              editable={!cargando}
+              accessibilityLabel="Tu nombre"
               className="flex-1 py-[12px] px-[10px] text-text"
             />
           </View>
@@ -130,6 +154,8 @@ export default function ScreenRegister({
               placeholderTextColor="#8A849C"
               value={email}
               onChangeText={setEmail}
+              editable={!cargando}
+              accessibilityLabel="Correo electrónico"
               keyboardType="email-address"
               autoCapitalize="none"
               className="flex-1 py-[12px] px-[10px] text-text"
@@ -147,6 +173,8 @@ export default function ScreenRegister({
               placeholderTextColor="#8A849C"
               value={password}
               onChangeText={setPassword}
+              editable={!cargando}
+              accessibilityLabel="Contraseña"
               secureTextEntry={!verPassword}
               className="flex-1 py-[12px] px-[10px] text-text"
             />
@@ -170,6 +198,8 @@ export default function ScreenRegister({
               placeholderTextColor="#8A849C"
               value={confirmPassword}
               onChangeText={setConfirmPassword}
+              editable={!cargando}
+              accessibilityLabel="Confirmar contraseña"
               secureTextEntry={!verPassword}
               className="flex-1 py-[12px] px-[10px] text-text"
             />
@@ -191,6 +221,7 @@ export default function ScreenRegister({
         </View>
 
         <TouchableOpacity
+          disabled={cargando}
           onPress={() => onNav(10)}
           className="mt-[20px] items-center"
         >

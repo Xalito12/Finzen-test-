@@ -42,9 +42,9 @@ export default function ScreenLogin({ onNav }: { onNav: (i: number) => void }) {
           .from("perfiles")
           .select("sueldo")
           .eq("id", data.session.user.id)
-          .single();
+          .maybeSingle();
         if (errorPerfil) throw errorPerfil;
-        onNav(Number(perfil.sueldo) > 0 ? 2 : 1);
+        onNav(Number(perfil?.sueldo) > 0 ? 2 : 1);
       }
     } catch (err: any) {
       Alert.alert("Error inesperado", err.message || "Ocurrió un error.");

@@ -1,5 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import { useIsFocused } from "@react-navigation/native";
+import TutorialCard from "../tutorial/TutorialCard";
 import React, {
   useCallback,
   useEffect,
@@ -118,6 +119,7 @@ export default function ScreenNotifications({
         onRefresh={actualizar}
         ListHeaderComponent={
           <View>
+            <TutorialCard pantalla="Notificaciones" onNav={onNav} />
             <Text className="text-[20px] font-bold text-text mb-[8px]">
               Notificaciones
             </Text>

@@ -1,5 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import { useIsFocused } from "@react-navigation/native";
+import TutorialCard from "../tutorial/TutorialCard";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -304,6 +305,7 @@ export default function ScreenSavingsGoals({
         }}
         ListHeaderComponent={
           <View className="mb-[16px]">
+            <TutorialCard pantalla="Metas" onNav={onNav} />
             <View className="flex-row justify-between items-center mb-[12px]">
               <Text className="text-[22px] font-bold text-text">
                 Metas de ahorro

@@ -1,6 +1,8 @@
 // screens/ScreenQuickExpense.tsx
 import { Feather } from "@expo/vector-icons";
 import { useIsFocused } from "@react-navigation/native";
+import TutorialCard from "../tutorial/TutorialCard";
+import { useTutorial } from "../tutorial/TutorialProvider";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -18,6 +20,7 @@ export default function ScreenQuickExpense({
 }: {
   onNav: (i: number) => void;
 }) {
+  const { notificarAccion } = useTutorial();
   const isFocused = useIsFocused();
   const focusedRef = useRef(isFocused);
   focusedRef.current = isFocused;
@@ -170,7 +173,8 @@ export default function ScreenQuickExpense({
       setAmount("0");
       setCrearCategoria(false);
       setNombreCategoria("");
-      onNav(2);
+      const destino = notificarAccion("gasto_creado");
+      onNav(destino ?? 2);
     } catch (err: any) {
       Alert.alert(
         "Error inesperado",
@@ -187,6 +191,7 @@ export default function ScreenQuickExpense({
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{ padding: 20, paddingBottom: 24 }}
       >
+        <TutorialCard pantalla="Gasto" onNav={onNav} />
         {/* Cabecera */}
         <View className="flex-row justify-between items-center mb-[20px]">
           <Text className="text-[20px] font-bold text-text">Nuevo gasto</Text>

@@ -1,6 +1,8 @@
 // screens/ScreenProfile.tsx
 import { Feather } from "@expo/vector-icons";
 import { useIsFocused } from "@react-navigation/native";
+import TutorialCard from "../tutorial/TutorialCard";
+import { useTutorial } from "../tutorial/TutorialProvider";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -22,6 +24,7 @@ export default function ScreenProfile({
 }: {
   onNav: (i: number) => void;
 }) {
+  const { reiniciar } = useTutorial();
   const isFocused = useIsFocused();
   const focusedRef = useRef(isFocused);
   focusedRef.current = isFocused;
@@ -183,6 +186,7 @@ export default function ScreenProfile({
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{ padding: 24, paddingBottom: 24 }}
       >
+        <TutorialCard pantalla="Perfil" onNav={onNav} />
         {/* Cabecera */}
         <View className="flex-row justify-between items-center mb-[20px]">
           <Text className="text-[24px] font-bold text-text">Mi Perfil</Text>
@@ -256,6 +260,22 @@ export default function ScreenProfile({
         </View>
 
         <View className="bg-card rounded-[16px] mb-[24px]">
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Repetir tutorial de FinZen"
+            onPress={() => {
+              reiniciar();
+              onNav(2);
+            }}
+            className="flex-row items-center p-[16px] gap-[12px] border-b-[1px] border-bg"
+            style={({ pressed }) => ({ opacity: pressed ? 0.65 : 1 })}
+          >
+            <Feather name="help-circle" size={20} color="#512DA8" />
+            <Text className="flex-1 text-text font-semibold text-[15px]">
+              Repetir tutorial
+            </Text>
+            <Feather name="chevron-right" size={20} color="#6B6580" />
+          </Pressable>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Abrir gastos fijos"
