@@ -11,6 +11,7 @@ import React, {
 import {
   Alert,
   Modal,
+  Pressable,
   ScrollView,
   Text,
   TextInput,
@@ -26,6 +27,18 @@ import {
 
 type CategoriaConTotales = CategoriaResumen & { gastado: number };
 type IdCategoria = CategoriaResumen["id"];
+
+// Cede el turno para que React Native pinte la retirada antes de comenzar
+// el trabajo de sesión/persistencia. No adelanta un borrado al onPressIn.
+function esperarPintado() {
+  return new Promise<void>((resolve) => {
+    if (typeof requestAnimationFrame === "function") {
+      requestAnimationFrame(() => setTimeout(resolve, 0));
+    } else {
+      setTimeout(resolve, 0);
+    }
+  });
+}
 
 const categoriasSugeridas = [
   { nombre: "Alimentación", icono: "🍔", limite: 160000, color: "#7E57C2" },
@@ -56,6 +69,8 @@ export default function ScreenCategories({
     CategoriaConTotales[]
   >([]);
   const eliminaciones = useRef(new Map<IdCategoria, CategoriaConTotales>());
+  // Conserva las eliminaciones confirmadas frente a lecturas antiguas.
+  const eliminadasConfirmadas = useRef(new Set<IdCategoria>());
   const montado = useRef(true);
   const [idsEliminando, setIdsEliminando] = useState<ReadonlySet<IdCategoria>>(
     new Set(),
@@ -105,6 +120,7 @@ export default function ScreenCategories({
       let categoriasConTotales = [];
 
       for (let i = 0; i < (categoriasDB || []).length; i++) {
+        if (eliminadasConfirmadas.current.has(categoriasDB[i].id)) continue;
         const categoriaActual = { ...categoriasDB[i], gastado: 0 };
         categoriaActual.gastado = resumen.gastoCategoria(
           categoriaActual.nombre,
@@ -276,6 +292,8 @@ export default function ScreenCategories({
       setIdEditar(0);
     }
     try {
+      await esperarPintado();
+      if (!montado.current) return;
       const {
         data: { session },
         error: errorSesion,
@@ -303,6 +321,7 @@ export default function ScreenCategories({
             "No se pudo eliminar la categoría. Revisa tus permisos o inténtalo nuevamente.",
           );
       }
+      eliminadasConfirmadas.current.add(idBorrar);
       if (montado.current)
         setListaCategorias((actuales) =>
           actuales.filter((c) => c.id !== idBorrar),
@@ -324,13 +343,11 @@ export default function ScreenCategories({
       }
     } finally {
       eliminaciones.current.delete(idBorrar);
-      ultimaCarga.current += 1;
       if (montado.current) {
         setIdsEliminando(new Set(eliminaciones.current.keys()));
-        // Reconciliación en segundo plano, sin retrasar la desaparición.
-        if (eliminaciones.current.size === 0 && focusedRef.current)
-          cargarCategorias();
       }
+      // La respuesta del DELETE ya confirma el cambio. No se vuelve a
+      // descargar toda la lista para terminar una eliminación local.
     }
   };
 
@@ -447,6 +464,16 @@ export default function ScreenCategories({
           </View>
         )}
 
+        {idsEliminando.size > 0 && (
+          <Text
+            accessibilityLiveRegion="polite"
+            className="text-primary text-[12px] mb-[12px]"
+          >
+            {idsEliminando.size === 1
+              ? "Guardando eliminación…"
+              : "Guardando eliminaciones…"}
+          </Text>
+        )}
         <View className="flex-row bg-card rounded-[16px] p-[20px] justify-around mb-[20px]">
           <View className="items-center">
             <Text className="text-[24px] font-black text-primary">
@@ -502,12 +529,15 @@ export default function ScreenCategories({
                 style={{ borderColor: fondoEstado }}
               >
                 <View className="flex-row justify-between items-start mb-[12px]">
-                  <View className="flex-row items-center gap-[12px]">
+                  <View className="flex-1 flex-row items-center gap-[12px]">
                     <View className="w-[48px] h-[48px] rounded-[12px] bg-bg items-center justify-center">
                       <Text className="text-[24px]">{c.icono}</Text>
                     </View>
-                    <View>
-                      <Text className="text-[16px] font-bold text-text">
+                    <View className="flex-1">
+                      <Text
+                        numberOfLines={2}
+                        className="text-[16px] font-bold text-text"
+                      >
                         {c.nombre}
                       </Text>
                       <View
@@ -523,18 +553,39 @@ export default function ScreenCategories({
                       </View>
                     </View>
                   </View>
-                  <View className="flex-row gap-[12px]">
-                    <TouchableOpacity onPress={() => prepararEdicion(c)}>
-                      <Feather name="edit-2" size={18} color="#8A849C" />
-                    </TouchableOpacity>
-                    <TouchableOpacity
+                  <View className="flex-row gap-[4px]">
+                    <Pressable
+                      onPress={() => prepararEdicion(c)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Editar categoría ${c.nombre}`}
+                      hitSlop={4}
+                      style={({ pressed }) => ({
+                        minWidth: 44,
+                        minHeight: 44,
+                        alignItems: "center",
+                        justifyContent: "center",
+                        borderRadius: 22,
+                        backgroundColor: pressed ? "#E8E4F0" : "transparent",
+                      })}
+                    >
+                      <Feather name="edit-2" size={18} color="#512DA8" />
+                    </Pressable>
+                    <Pressable
                       accessibilityRole="button"
                       accessibilityLabel={`Eliminar categoría ${c.nombre}`}
-                      hitSlop={8}
+                      hitSlop={4}
                       onPress={() => borrarCategoria(c.id)}
+                      style={({ pressed }) => ({
+                        minWidth: 44,
+                        minHeight: 44,
+                        alignItems: "center",
+                        justifyContent: "center",
+                        borderRadius: 22,
+                        backgroundColor: pressed ? "#FEE2E2" : "transparent",
+                      })}
                     >
-                      <Feather name="trash-2" size={18} color="#8A849C" />
-                    </TouchableOpacity>
+                      <Feather name="trash-2" size={18} color="#C62828" />
+                    </Pressable>
                   </View>
                 </View>
 

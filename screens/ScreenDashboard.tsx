@@ -25,6 +25,8 @@ import {
   type GastoResumen,
 } from "../database/consultasFinanzas";
 import { calcularEstadoPresupuesto } from "../models/estadoPresupuesto";
+import { generarNotificaciones } from "../models/notificaciones";
+import { listarMetas } from "../database/metasService";
 
 interface CategoriaInicio {
   id: number | string;
@@ -88,6 +90,7 @@ export default function ScreenDashboard({
 }) {
   const active = useIsFocused();
   const [refrescando, setRefrescando] = useState(false);
+  const [numeroAlertas, setNumeroAlertas] = useState(0);
   const [guardandoGasto, setGuardandoGasto] = useState(false);
   const [perfilCargado, setPerfilCargado] = useState(false);
   const [cargandoPerfil, setCargandoPerfil] = useState(true);
@@ -110,7 +113,9 @@ export default function ScreenDashboard({
   const cargarInicio = useCallback(async () => {
     const solicitud = ++ultimaCarga.current;
     try {
-      const { user, perfil, gastos, categorias } = await consultarInicio();
+      const metasPendientes = listarMetas().catch(() => null);
+      const datos = await consultarInicio();
+      const { user, perfil, gastos, categorias } = datos;
       // Descarta respuestas de una pantalla anterior o de una consulta superada.
       if (solicitud !== ultimaCarga.current) return;
       const resumen = resumirGastos(gastos);
@@ -133,6 +138,13 @@ export default function ScreenDashboard({
           icono: cat.icono || "🏷️",
         })),
       );
+      setNumeroAlertas(generarNotificaciones(datos, []).length);
+      // El presupuesto se dibuja primero; las metas no retrasan su carga.
+      void metasPendientes.then((metas) => {
+        if (metas && solicitud === ultimaCarga.current) {
+          setNumeroAlertas(generarNotificaciones(datos, metas).length);
+        }
+      });
       setPerfilCargado(true);
       setErrorPerfil(false);
     } catch (err: any) {
@@ -327,12 +339,32 @@ export default function ScreenDashboard({
                   {nombreUsuario} 👋
                 </Text>
               </View>
-              <TouchableOpacity
+              <Pressable
                 onPress={() => onNav(6)}
-                className="w-[40px] h-[40px] rounded-[12px] bg-card items-center justify-center"
+                accessibilityRole="button"
+                accessibilityLabel={`Notificaciones: ${numeroAlertas} alertas activas`}
+                hitSlop={6}
+                className="w-[44px] h-[44px] rounded-[12px] bg-card items-center justify-center"
               >
                 <Feather name="bell" size={20} color="#512DA8" />
-              </TouchableOpacity>
+                {numeroAlertas > 0 && (
+                  <View
+                    pointerEvents="none"
+                    className="absolute bg-error rounded-[10px] items-center justify-center"
+                    style={{
+                      top: -5,
+                      right: -5,
+                      minWidth: 20,
+                      height: 20,
+                      paddingHorizontal: 4,
+                    }}
+                  >
+                    <Text className="text-card text-[10px] font-bold">
+                      {numeroAlertas > 99 ? "99+" : numeroAlertas}
+                    </Text>
+                  </View>
+                )}
+              </Pressable>
             </View>
 
             {/* Tarjeta de Resumen Financiero */}
