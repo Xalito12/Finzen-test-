@@ -15,6 +15,7 @@ import BottomNav from "../components/BottomNav";
 import MiniBadge from "../components/MiniBadge";
 import ProgressBar from "../components/ProgressBar";
 import { supabase } from "../database/supabase";
+import { calcularEstadoPresupuesto } from "../models/estadoPresupuesto";
 
 export default function ScreenDashboard({
   onNav,
@@ -239,8 +240,10 @@ export default function ScreenDashboard({
     }
   };
 
-  const porcentajeTotal =
-    sueldoTotal > 0 ? Math.round((totalGastado / sueldoTotal) * 100) : 0;
+  const estadoPresupuesto = calcularEstadoPresupuesto(
+    sueldoTotal,
+    totalGastado,
+  );
   const saldoDisponible = sueldoTotal - totalGastado;
 
   if (!perfilCargado) {
@@ -302,15 +305,18 @@ export default function ScreenDashboard({
           colors={["#512DA8", "#512DA8"]}
           style={{ borderRadius: 20, padding: 20, marginBottom: 20 }}
         >
-          <View className="flex-row justify-between items-center">
-            <View>
+          <View className="flex-row justify-between items-center gap-[12px]">
+            <View className="flex-1">
               <Text
                 className="text-[11px]"
                 style={{ color: "rgba(255,255,255,0.7)" }}
               >
                 Disponible · CLP
               </Text>
-              <Text className="text-[#A5F3AE] text-[24px] font-bold">
+              <Text
+                className="text-[24px] font-bold"
+                style={{ color: estadoPresupuesto.color }}
+              >
                 ${saldoDisponible.toLocaleString("es-CL")}
               </Text>
               <View className="flex-row gap-[14px] mt-[12px] items-center">
@@ -349,9 +355,21 @@ export default function ScreenDashboard({
               </View>
             </View>
             <MiniBadge
-              percent={porcentajeTotal}
-              color="rgba(255,255,255,0.85)"
+              percent={estadoPresupuesto.porcentajeDisponible}
+              color={estadoPresupuesto.color}
+              status={estadoPresupuesto.etiqueta}
             />
+          </View>
+          <View className="mt-[16px]">
+            <Text
+              className="font-bold text-[13px]"
+              style={{ color: estadoPresupuesto.color }}
+            >
+              {estadoPresupuesto.etiqueta}
+            </Text>
+            <Text className="text-card text-[12px] mt-[4px]">
+              {estadoPresupuesto.mensaje}
+            </Text>
           </View>
         </LinearGradient>
 

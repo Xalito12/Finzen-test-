@@ -1,57 +1,83 @@
 import React from "react";
 import { Text, View } from "react-native";
+import Svg, { Circle } from "react-native-svg";
 
-export default function MiniBadge({
-  percent,
-  color,
-}: {
-  percent: number;
+interface MiniBadgeProps {
+  percent: number | null;
   color: string;
-}) {
-  const safePercent = Number.isFinite(percent) ? Math.max(0, percent) : 0;
-  const progress = Math.min(safePercent, 100);
-  const progressColor =
-    safePercent >= 100 ? "#FF8A80" : safePercent >= 80 ? "#FFD54F" : "#A5F3AE";
-  const segmentCount = 120;
+  status: string;
+}
+
+export default function MiniBadge({ percent, color, status }: MiniBadgeProps) {
+  const size = 80;
+  const strokeWidth = 7;
+  const radius = (size - strokeWidth) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const validPercent =
+    percent !== null && Number.isFinite(percent) ? percent : null;
+  const progress =
+    validPercent === null ? 0 : Math.max(0, Math.min(100, validPercent));
+  const percentageText =
+    validPercent === null ? "—" : `${Number(validPercent.toFixed(1))}%`;
 
   return (
     <View
       accessible
-      accessibilityRole="progressbar"
-      accessibilityLabel={`Porcentaje del sueldo gastado: ${safePercent}%`}
-      accessibilityValue={{ min: 0, max: 100, now: progress }}
-      className="w-[60px] h-[60px] items-center justify-center"
+      accessibilityRole="image"
+      accessibilityLabel={
+        validPercent === null
+          ? status
+          : `${status}. ${percentageText} del presupuesto disponible.`
+      }
+      style={{ width: size, height: size, flexShrink: 0 }}
     >
-      <View
-        style={{
-          position: "absolute",
-          width: 60,
-          height: 60,
-          borderRadius: 30,
-          borderWidth: 5,
-          borderColor: color,
-          opacity: 0.22,
-        }}
-      />
-      {/* Overlapping dots draw a continuous arc using native views on every platform. */}
-      {Array.from({ length: Math.round((progress / 100) * segmentCount) }, (_, i) => {
-        const angle = (i / segmentCount) * Math.PI * 2 - Math.PI / 2;
-        return (
-          <View
-            key={i}
-            style={{
-              position: "absolute",
-              width: 5,
-              height: 5,
-              borderRadius: 2.5,
-              left: 27.5 + 27.5 * Math.cos(angle),
-              top: 27.5 + 27.5 * Math.sin(angle),
-              backgroundColor: progressColor,
-            }}
+      <Svg
+        width={size}
+        height={size}
+        viewBox={`0 0 ${size} ${size}`}
+        accessible={false}
+      >
+        <Circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          fill="none"
+          stroke="rgba(255,255,255,0.18)"
+          strokeWidth={strokeWidth}
+        />
+        {progress > 0 && (
+          <Circle
+            cx={size / 2}
+            cy={size / 2}
+            r={radius}
+            fill="none"
+            stroke={color}
+            strokeWidth={strokeWidth}
+            strokeDasharray={`${circumference} ${circumference}`}
+            strokeDashoffset={circumference * (1 - progress / 100)}
+            strokeLinecap="round"
+            rotation={-90}
+            origin={`${size / 2}, ${size / 2}`}
           />
-        );
-      })}
-      <Text className="text-[13px] font-bold text-card">{safePercent}%</Text>
+        )}
+      </Svg>
+      <View
+        pointerEvents="none"
+        className="absolute items-center justify-center"
+        style={{ top: 0, bottom: 0, left: 0, right: 0 }}
+        accessible={false}
+      >
+        <Text
+          style={{
+            color,
+            fontSize: percentageText.length > 6 ? 13 : 17,
+            fontWeight: "700",
+          }}
+        >
+          {percentageText}
+        </Text>
+        <Text className="text-card text-[9px]">disponible</Text>
+      </View>
     </View>
   );
 }
