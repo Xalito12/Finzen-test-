@@ -1,11 +1,11 @@
 import { Feather } from "@expo/vector-icons";
 import { useIsFocused } from "@react-navigation/native";
-import TutorialCard from "../tutorial/TutorialCard";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
   FlatList,
+  Keyboard,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -15,8 +15,8 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { layout } from "../components/layout";
 import ProgressBar from "../components/ProgressBar";
-import { confirmarEliminacion } from "../utils/confirmarEliminacion";
 import {
   actualizarMeta,
   crearMeta,
@@ -32,8 +32,46 @@ import {
   leerMontoMeta,
   porcentajeMeta,
 } from "../models/metas";
-
+import TutorialCard from "../tutorial/TutorialCard";
+import { confirmarEliminacion } from "../utils/confirmarEliminacion";
 const dinero = (monto: number) => `$${monto.toLocaleString("es-CL")}`;
+
+const mesesCalendario = [
+  "Enero",
+  "Febrero",
+  "Marzo",
+  "Abril",
+  "Mayo",
+  "Junio",
+  "Julio",
+  "Agosto",
+  "Septiembre",
+  "Octubre",
+  "Noviembre",
+  "Diciembre",
+];
+
+const diasSemana = ["Lu", "Ma", "Mi", "Ju", "Vi", "Sá", "Do"];
+
+function formatearFecha(fecha: string) {
+  return fecha.split("-").reverse().join("/");
+}
+
+function fechaCalendario(anio: number, mes: number, dia: number) {
+  const fecha = new Date(0);
+  fecha.setHours(12, 0, 0, 0);
+  fecha.setFullYear(anio, mes, dia);
+  return fecha;
+}
+
+function claveFecha(anio: number, mes: number, dia: number) {
+  return [
+    String(anio).padStart(4, "0"),
+    String(mes + 1).padStart(2, "0"),
+    String(dia).padStart(2, "0"),
+  ].join("-");
+}
+
 function Boton({
   texto,
   onPress,
@@ -66,6 +104,150 @@ function Boton({
   );
 }
 
+function CalendarioMeta({
+  fecha,
+  onSeleccionar,
+  onCerrar,
+}: {
+  fecha: string;
+  onSeleccionar: (fecha: string) => void;
+  onCerrar: () => void;
+}) {
+  const hoy = new Date();
+  const [mesVisible, setMesVisible] = useState(() => {
+    if (fecha && fechaLocalValida(fecha)) {
+      const [anio, mes] = fecha.split("-").map(Number);
+      return fechaCalendario(anio, mes - 1, 1);
+    }
+    return fechaCalendario(hoy.getFullYear(), hoy.getMonth(), 1);
+  });
+
+  const anio = mesVisible.getFullYear();
+  const mes = mesVisible.getMonth();
+  const nombreMes = mesesCalendario[mes] ?? "";
+  const diasDelMes = fechaCalendario(anio, mes + 1, 0).getDate();
+  const inicioSemana = (mesVisible.getDay() + 6) % 7;
+  const fechaHoy = claveFecha(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
+
+  const cambiarMes = (paso: number) => {
+    setMesVisible((actual) =>
+      fechaCalendario(actual.getFullYear(), actual.getMonth() + paso, 1),
+    );
+  };
+
+  return (
+    <ScrollView>
+      <View className="flex-row items-center justify-between mb-[12px]">
+        <Text
+          accessibilityRole="header"
+          className="text-[20px] font-bold text-text"
+        >
+          Elige una fecha
+        </Text>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Cerrar calendario"
+          onPress={onCerrar}
+          hitSlop={6}
+          className="p-[8px]"
+        >
+          <Feather name="x" size={20} color="#512DA8" />
+        </Pressable>
+      </View>
+
+      <View className="bg-bg rounded-[14px] p-[8px]">
+        <View className="flex-row justify-between items-center mb-[6px]">
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Mes anterior"
+            onPress={() => cambiarMes(-1)}
+            className="bg-card rounded-[10px] p-[10px]"
+          >
+            <Feather name="chevron-left" size={20} color="#512DA8" />
+          </Pressable>
+
+          <Text
+            accessibilityLiveRegion="polite"
+            className="flex-1 px-[4px] text-center font-semibold text-text"
+          >
+            {nombreMes} {anio}
+          </Text>
+
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Mes siguiente"
+            onPress={() => cambiarMes(1)}
+            className="bg-card rounded-[10px] p-[10px]"
+          >
+            <Feather name="chevron-right" size={20} color="#512DA8" />
+          </Pressable>
+        </View>
+
+        <View className="flex-row">
+          {diasSemana.map((nombre) => (
+            <Text
+              key={nombre}
+              className="flex-1 py-[6px] text-center text-[12px] font-semibold text-text-secondary"
+            >
+              {nombre}
+            </Text>
+          ))}
+        </View>
+
+        {Array.from({ length: 6 }, (_, semana) => (
+          <View key={semana} className="flex-row">
+            {diasSemana.map((nombre, columna) => {
+              const dia = semana * diasSemana.length + columna - inicioSemana + 1;
+
+              if (dia < 1 || dia > diasDelMes) {
+                return <View key={nombre} className="flex-1 min-h-[40px]" />;
+              }
+
+              const valor = claveFecha(anio, mes, dia);
+              const seleccionado = valor === fecha;
+              const esHoy = valor === fechaHoy;
+              const etiqueta = `${dia} de ${nombreMes.toLowerCase()} de ${anio}`;
+
+              return (
+                <Pressable
+                  key={nombre}
+                  accessibilityRole="button"
+                  accessibilityLabel={esHoy ? `${etiqueta}, hoy` : etiqueta}
+                  accessibilityState={{ selected: seleccionado }}
+                  onPress={() => onSeleccionar(valor)}
+                  className={`flex-1 min-h-[40px] items-center justify-center rounded-[10px] ${seleccionado ? "bg-primary" : ""}`}
+                >
+                  <Text
+                    className={
+                      seleccionado
+                        ? "text-white font-semibold"
+                        : esHoy
+                          ? "text-primary font-bold"
+                          : "text-text"
+                    }
+                  >
+                    {dia}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        ))}
+      </View>
+
+      {fecha ? (
+        <View className="mt-[12px]">
+          <Boton
+            texto="Quitar fecha"
+            onPress={() => onSeleccionar("")}
+            secundario
+          />
+        </View>
+      ) : null}
+    </ScrollView>
+  );
+}
+
 export default function ScreenSavingsGoals({
   onNav,
 }: {
@@ -74,22 +256,29 @@ export default function ScreenSavingsGoals({
   const focused = useIsFocused();
   const focusedRef = useRef(focused);
   focusedRef.current = focused;
+
   const montado = useRef(true),
     version = useRef(0),
     guardandoRef = useRef(false);
   const borrados = useRef(new Map<string, MetaAhorro>());
+
   const [metas, setMetas] = useState<MetaAhorro[]>([]);
   const metasRef = useRef(metas);
   metasRef.current = metas;
+
   const [cargando, setCargando] = useState(true),
     [refrescando, setRefrescando] = useState(false);
   const [error, setError] = useState("");
+
   const [formulario, setFormulario] = useState(false),
     [editando, setEditando] = useState<MetaAhorro | null>(null);
+
+  const [eligiendoFecha, setEligiendoFecha] = useState(false);
   const [nombre, setNombre] = useState(""),
     [objetivo, setObjetivo] = useState(""),
     [inicial, setInicial] = useState("0"),
     [fecha, setFecha] = useState("");
+
   const [aporteMeta, setAporteMeta] = useState<MetaAhorro | null>(null),
     [montoAporte, setMontoAporte] = useState("");
   const [retirar, setRetirar] = useState(false),
@@ -102,6 +291,7 @@ export default function ScreenSavingsGoals({
       version.current++;
     };
   }, []);
+
   const cargar = useCallback(async () => {
     const solicitud = ++version.current;
     try {
@@ -119,6 +309,7 @@ export default function ScreenSavingsGoals({
       }
     }
   }, []);
+
   useEffect(() => {
     if (!focused) {
       setRefrescando(false);
@@ -129,21 +320,26 @@ export default function ScreenSavingsGoals({
       version.current++;
     };
   }, [focused, cargar]);
+
   const abrirNueva = () => {
     setEditando(null);
     setNombre("");
     setObjetivo("");
     setInicial("0");
     setFecha("");
+    setEligiendoFecha(false);
     setFormulario(true);
   };
+
   const abrirEdicion = (meta: MetaAhorro) => {
     setEditando(meta);
     setNombre(meta.nombre);
     setObjetivo(String(meta.monto_objetivo));
     setFecha(meta.fecha_objetivo || "");
+    setEligiendoFecha(false);
     setFormulario(true);
   };
+
   const aplicar = (meta: MetaAhorro) => {
     version.current++;
     setMetas((actuales) =>
@@ -152,10 +348,13 @@ export default function ScreenSavingsGoals({
         : [meta, ...actuales],
     );
   };
+
   const guardar = async () => {
     if (guardandoRef.current) return;
+
     const monto = leerMontoMeta(objetivo),
       ahorro = leerMontoMeta(inicial);
+
     if (!nombre.trim() || nombre.trim().length > 80) {
       Alert.alert(
         "Nombre de la meta",
@@ -163,6 +362,7 @@ export default function ScreenSavingsGoals({
       );
       return;
     }
+
     if (
       !Number.isFinite(monto) ||
       monto <= 0 ||
@@ -174,24 +374,29 @@ export default function ScreenSavingsGoals({
       );
       return;
     }
+
     if (fecha.trim() && !fechaLocalValida(fecha.trim())) {
       Alert.alert(
         "Revisa la fecha",
-        "Usa una fecha válida con formato AAAA-MM-DD, por ejemplo 2027-06-30.",
+        "Elige una fecha válida en el calendario.",
       );
       return;
     }
+
     guardandoRef.current = true;
     setGuardando(true);
+
     try {
       const datos = {
         nombre: nombre.trim(),
         monto_objetivo: monto,
         fecha_objetivo: fecha.trim() || null,
       };
+
       const meta = editando
         ? await actualizarMeta(editando.id, datos)
         : await crearMeta({ ...datos, monto_ahorrado: ahorro });
+
       if (montado.current) {
         aplicar(meta);
         setFormulario(false);
@@ -205,11 +410,19 @@ export default function ScreenSavingsGoals({
       if (montado.current) setGuardando(false);
     }
   };
+
   const pedirEliminarMeta = (meta: MetaAhorro) => {
     if (borrados.current.has(meta.id) || guardandoRef.current) return;
+
+    const mensaje = `¿Quieres eliminar la meta «${meta.nombre}» y su registro de progreso?`;
+    const devolucion =
+      meta.monto_ahorrado > 0
+        ? " El ahorro de esta meta volverá a tu saldo disponible."
+        : "";
+
     confirmarEliminacion(
       "Eliminar meta",
-      `¿Quieres eliminar la meta «${meta.nombre}» y su registro de progreso?`,
+      mensaje + devolucion,
       () => {
         if (
           montado.current &&
@@ -221,11 +434,14 @@ export default function ScreenSavingsGoals({
       },
     );
   };
+
   const borrar = async (meta: MetaAhorro) => {
     if (borrados.current.has(meta.id) || guardandoRef.current) return;
+
     borrados.current.set(meta.id, meta);
     version.current++;
     setMetas((actuales) => actuales.filter((m) => m.id !== meta.id));
+
     try {
       await eliminarMeta(meta.id);
     } catch (e) {
@@ -244,13 +460,17 @@ export default function ScreenSavingsGoals({
         cargar();
     }
   };
+
   const aportar = async () => {
     if (!aporteMeta || guardandoRef.current) return;
+
     const monto = leerMontoMeta(montoAporte);
+
     if (!Number.isFinite(monto) || monto <= 0) {
       Alert.alert("Revisa el monto", "Ingresa un monto mayor que cero.");
       return;
     }
+
     if (retirar && monto > aporteMeta.monto_ahorrado) {
       Alert.alert(
         "Ahorro insuficiente",
@@ -258,8 +478,10 @@ export default function ScreenSavingsGoals({
       );
       return;
     }
+
     guardandoRef.current = true;
     setGuardando(true);
+
     try {
       const meta = await registrarAporte(
         aporteMeta.id,
@@ -289,6 +511,7 @@ export default function ScreenSavingsGoals({
       if (montado.current) setGuardando(false);
     }
   };
+
   const resumen = metas.reduce((total, m) => total + m.monto_ahorrado, 0);
 
   return (
@@ -306,6 +529,7 @@ export default function ScreenSavingsGoals({
         ListHeaderComponent={
           <View className="mb-[16px]">
             <TutorialCard pantalla="Metas" onNav={onNav} />
+
             <View className="flex-row justify-between items-center mb-[12px]">
               <Text className="text-[22px] font-bold text-text">
                 Metas de ahorro
@@ -316,13 +540,14 @@ export default function ScreenSavingsGoals({
                 disabled={guardando}
               />
             </View>
+
             <Text className="text-text-secondary">
               Ahorro registrado: {dinero(resumen)}
             </Text>
             <Text className="text-text-secondary text-[12px] mt-[8px]">
-              Registra aquí el dinero que apartaste. Los aportes y retiros no
-              cambian tu sueldo ni crean gastos automáticamente.
+              Los aportes bajan tu saldo disponible y los retiros lo aumentan.
             </Text>
+
             <Pressable
               accessibilityRole="button"
               onPress={() => onNav(6)}
@@ -332,6 +557,7 @@ export default function ScreenSavingsGoals({
                 Ver avisos de mis metas
               </Text>
             </Pressable>
+
             {error ? (
               <View className="bg-card p-[14px] rounded-[12px]">
                 <Text accessibilityRole="alert" className="text-error">
@@ -367,6 +593,7 @@ export default function ScreenSavingsGoals({
             : dias !== null && dias < 0
               ? "#C62828"
               : "#512DA8";
+
           return (
             <View className="bg-card rounded-[16px] p-[16px] mb-[12px]">
               <View className="flex-row items-center justify-between mb-[12px]">
@@ -377,7 +604,9 @@ export default function ScreenSavingsGoals({
                   {porcentajeMeta(meta)}%
                 </Text>
               </View>
+
               <ProgressBar percent={porcentajeMeta(meta)} color={color} />
+
               <Text className="text-text mt-[10px]">
                 {dinero(meta.monto_ahorrado)} de {dinero(meta.monto_objetivo)}
               </Text>
@@ -388,12 +617,13 @@ export default function ScreenSavingsGoals({
                     ? "Fecha vencida: puedes actualizarla o seguir ahorrando."
                     : "En progreso"}
               </Text>
+
               {meta.fecha_objetivo ? (
                 <Text className="text-text-secondary text-[12px] mt-[4px]">
-                  Fecha objetivo:{" "}
-                  {meta.fecha_objetivo.split("-").reverse().join("/")}
+                  Fecha objetivo: {formatearFecha(meta.fecha_objetivo)}
                 </Text>
               ) : null}
+
               <View className="flex-row items-center justify-between mt-[12px]">
                 <Boton
                   texto="Registrar movimiento"
@@ -429,12 +659,18 @@ export default function ScreenSavingsGoals({
           );
         }}
       />
+
       <Modal
         visible={formulario && focused}
         transparent
         animationType="slide"
         onRequestClose={() => {
-          if (!guardando) setFormulario(false);
+          if (guardando) return;
+          if (eligiendoFecha) {
+            setEligiendoFecha(false);
+            return;
+          }
+          setFormulario(false);
         }}
       >
         <KeyboardAvoidingView
@@ -445,11 +681,28 @@ export default function ScreenSavingsGoals({
             className="flex-1 justify-center p-[20px]"
             style={{ backgroundColor: "rgba(0,0,0,0.4)" }}
           >
-            <View className="bg-card rounded-[16px] p-[20px] max-h-[90%]">
-              <ScrollView keyboardShouldPersistTaps="handled">
+            <View
+              className="bg-card rounded-[16px] p-[20px] max-h-[90%]"
+              style={layout.modal}
+            >              {eligiendoFecha && (
+              <CalendarioMeta
+                fecha={fecha}
+                onSeleccionar={(seleccion) => {
+                  setFecha(seleccion);
+                  setEligiendoFecha(false);
+                }}
+                onCerrar={() => setEligiendoFecha(false)}
+              />
+            )}
+
+              <ScrollView
+                keyboardShouldPersistTaps="handled"
+                style={eligiendoFecha ? { display: "none" } : undefined}
+              >
                 <Text className="text-[20px] font-bold text-text mb-[16px]">
                   {editando ? "Editar meta" : "Nueva meta"}
                 </Text>
+
                 <Text className="text-text-secondary mb-[6px]">Nombre</Text>
                 <TextInput
                   accessibilityLabel="Nombre de la meta"
@@ -461,6 +714,7 @@ export default function ScreenSavingsGoals({
                   editable={!guardando}
                   className="bg-bg p-[12px] rounded-[10px] text-text mb-[12px]"
                 />
+
                 <Text className="text-text-secondary mb-[6px]">
                   Monto objetivo ($)
                 </Text>
@@ -473,6 +727,7 @@ export default function ScreenSavingsGoals({
                   editable={!guardando}
                   className="bg-bg p-[12px] rounded-[10px] text-text mb-[12px]"
                 />
+
                 {!editando ? (
                   <>
                     <Text className="text-text-secondary mb-[6px]">
@@ -484,23 +739,42 @@ export default function ScreenSavingsGoals({
                       onChangeText={setInicial}
                       keyboardType="decimal-pad"
                       editable={!guardando}
-                      className="bg-bg p-[12px] rounded-[10px] text-text mb-[12px]"
+                      className="bg-bg p-[12px] rounded-[10px] text-text"
                     />
+                    <Text className="text-text-secondary text-[12px] mt-[4px] mb-[12px]">
+                      Este monto se descontará de tu saldo disponible.
+                    </Text>
                   </>
                 ) : null}
+
                 <Text className="text-text-secondary mb-[6px]">
                   Fecha objetivo (opcional)
                 </Text>
-                <TextInput
-                  accessibilityLabel="Fecha objetivo de la meta"
-                  value={fecha}
-                  onChangeText={setFecha}
-                  placeholder="AAAA-MM-DD"
-                  maxLength={10}
-                  autoCapitalize="none"
-                  editable={!guardando}
-                  className="bg-bg p-[12px] rounded-[10px] text-text mb-[16px]"
-                />
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    fecha
+                      ? `Cambiar fecha objetivo, ${formatearFecha(fecha)}`
+                      : "Seleccionar fecha objetivo"
+                  }
+                  disabled={guardando}
+                  onPress={() => {
+                    Keyboard.dismiss();
+                    setEligiendoFecha(true);
+                  }}
+                  className="bg-bg flex-row items-center gap-[10px] p-[12px] rounded-[10px] mb-[16px]"
+                >
+                  <Feather name="calendar" size={19} color="#512DA8" />
+                  <Text
+                    className={
+                      fecha ? "flex-1 text-text" : "flex-1 text-text-secondary"
+                    }
+                  >
+                    {fecha ? formatearFecha(fecha) : "Seleccionar fecha"}
+                  </Text>
+                  <Feather name="chevron-right" size={18} color="#512DA8" />
+                </Pressable>
+
                 <Boton
                   texto={guardando ? "Guardando…" : "Guardar meta"}
                   onPress={guardar}
@@ -519,6 +793,7 @@ export default function ScreenSavingsGoals({
           </View>
         </KeyboardAvoidingView>
       </Modal>
+
       <Modal
         visible={aporteMeta !== null && focused}
         transparent
@@ -535,13 +810,16 @@ export default function ScreenSavingsGoals({
             className="flex-1 justify-center p-[20px]"
             style={{ backgroundColor: "rgba(0,0,0,0.4)" }}
           >
-            <View className="bg-card rounded-[16px] p-[20px]">
-              <Text className="text-[18px] font-bold text-text mb-[8px]">
+            <View
+              className="bg-card rounded-[16px] p-[20px]"
+              style={layout.modal}
+            >              <Text className="text-[18px] font-bold text-text mb-[8px]">
                 {aporteMeta?.nombre}
               </Text>
               <Text className="text-text-secondary mb-[12px]">
                 Ahorro actual: {dinero(aporteMeta?.monto_ahorrado || 0)}
               </Text>
+
               <View className="flex-row gap-[8px] mb-[14px]">
                 <Boton
                   texto="Aportar"
@@ -556,6 +834,7 @@ export default function ScreenSavingsGoals({
                   onPress={() => setRetirar(true)}
                 />
               </View>
+
               <TextInput
                 accessibilityLabel="Monto del movimiento"
                 autoFocus
@@ -566,6 +845,7 @@ export default function ScreenSavingsGoals({
                 editable={!guardando}
                 className="bg-bg p-[12px] rounded-[10px] text-text mb-[16px]"
               />
+
               <Boton
                 texto={
                   guardando

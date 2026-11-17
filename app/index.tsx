@@ -6,7 +6,8 @@ import {
   Text,
   View,
 } from "react-native";
-import { SafeAreaProvider } from "react-native-safe-area-context";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { layout } from "../components/layout";
 import { supabase } from "../database/supabase";
 import FinzenTabs from "../navigation/FinzenTabs";
 import ScreenLogin from "../screens/ScreenLogin";
@@ -173,17 +174,33 @@ export default function App() {
       );
   }
 
-  return (
-    <SafeAreaProvider>
-      <View className="flex-1 bg-bg">
+   return (
+    <SafeAreaView
+      edges={
+        etapa === "Aplicacion"
+          ? ["left", "right"]
+          : ["left", "right", "bottom"]
+      }
+      style={{
+        flex: 1,
+        backgroundColor:
+          etapa === "Bienvenida" ? "#3F51B5" : "#F5F3FA",
+      }}
+    >
+      <View style={layout.frame}>
         <StatusBar barStyle="light-content" />
+
         {mensaje && etapa === "Ingreso" ? (
-          <Text accessibilityRole="alert" className="text-primary p-[12px]">
+          <Text
+            accessibilityRole="alert"
+            className="text-primary p-[12px]"
+          >
             {mensaje}
           </Text>
         ) : null}
+
         {contenido}
       </View>
-    </SafeAreaProvider>
+    </SafeAreaView>
   );
-}
+  }

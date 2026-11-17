@@ -1,35 +1,19 @@
 // screens/ScreenDashboard.tsx
 import { Feather } from "@expo/vector-icons";
-import { LinearGradient } from "expo-linear-gradient";
 import { useIsFocused } from "@react-navigation/native";
+import { LinearGradient } from "expo-linear-gradient";
 import React, { memo, useCallback, useEffect, useRef, useState } from "react";
-import {
-  ActivityIndicator,
-  Alert,
-  FlatList,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  Pressable,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { ActivityIndicator, Alert, FlatList, KeyboardAvoidingView, Modal, Platform, Pressable, Text, TextInput, TouchableOpacity, View, } from "react-native";
+import { layout } from "../components/layout";
 import MiniBadge from "../components/MiniBadge";
 import ProgressBar from "../components/ProgressBar";
+import { consultarInicio, resumirGastos, type GastoResumen, } from "../database/consultasFinanzas";
+import { listarMetas } from "../database/metasService";
 import { supabase } from "../database/supabase";
-import {
-  consultarInicio,
-  resumirGastos,
-  type GastoResumen,
-} from "../database/consultasFinanzas";
 import { calcularEstadoPresupuesto } from "../models/estadoPresupuesto";
 import { generarNotificaciones } from "../models/notificaciones";
-import { listarMetas } from "../database/metasService";
-import { confirmarEliminacion } from "../utils/confirmarEliminacion";
 import TutorialCard from "../tutorial/TutorialCard";
-
+import { confirmarEliminacion } from "../utils/confirmarEliminacion";
 interface CategoriaInicio {
   id: number | string;
   name: string;
@@ -104,6 +88,7 @@ export default function ScreenDashboard({
 
   const [listaGastos, setListaGastos] = useState<GastoResumen[]>([]);
   const [totalGastado, setTotalGastado] = useState(0);
+  const [totalAhorrado, setTotalAhorrado] = useState(0);
   const [categoriasDinamicas, setCategoriasDinamicas] = useState<
     CategoriaInicio[]
   >([]);
@@ -129,21 +114,26 @@ export default function ScreenDashboard({
   const cargarInicio = useCallback(async () => {
     const solicitud = ++ultimaCarga.current;
     try {
-      const metasPendientes = listarMetas().catch(() => null);
-      const datos = await consultarInicio();
+      const [datos, metas] = await Promise.all([consultarInicio(), listarMetas()]);
       const { user, perfil, gastos, categorias } = datos;
       // Descarta respuestas de una pantalla anterior o de una consulta superada.
       if (solicitud !== ultimaCarga.current) return;
       const resumen = resumirGastos(gastos);
+      const ahorroEnMetas = metas.reduce(
+        (total, meta) => total + Number(meta.monto_ahorrado),
+        0,
+      );
+      const alertas = generarNotificaciones(datos, metas).length;
       setNombreUsuario(
         perfil?.nombre ||
-          user.user_metadata?.nombre ||
-          user.email?.split("@")[0] ||
-          "Usuario",
+        user.user_metadata?.nombre ||
+        user.email?.split("@")[0] ||
+        "Usuario",
       );
       setSueldoTotal(Number(perfil?.sueldo) || 0);
       setListaGastos(gastos);
       setTotalGastado(resumen.total);
+      setTotalAhorrado(ahorroEnMetas);
       setCategoriasDinamicas(
         categorias.map((cat) => ({
           id: cat.id,
@@ -154,13 +144,7 @@ export default function ScreenDashboard({
           icono: cat.icono || "🏷️",
         })),
       );
-      setNumeroAlertas(generarNotificaciones(datos, []).length);
-      // El presupuesto se dibuja primero; las metas no retrasan su carga.
-      void metasPendientes.then((metas) => {
-        if (metas && solicitud === ultimaCarga.current) {
-          setNumeroAlertas(generarNotificaciones(datos, metas).length);
-        }
-      });
+      setNumeroAlertas(alertas);
       setPerfilCargado(true);
       setErrorPerfil(false);
     } catch (err: any) {
@@ -309,11 +293,12 @@ export default function ScreenDashboard({
     }
   };
 
+  const totalDescontado = totalGastado + totalAhorrado;
   const estadoPresupuesto = calcularEstadoPresupuesto(
     sueldoTotal,
-    totalGastado,
+    totalDescontado,
   );
-  const saldoDisponible = sueldoTotal - totalGastado;
+  const saldoDisponible = sueldoTotal - totalDescontado;
 
   if (!perfilCargado) {
     return (
@@ -474,6 +459,17 @@ export default function ScreenDashboard({
                       </Text>
                     </View>
                   </View>
+                  <View className="flex-row flex-wrap items-center gap-[6px] mt-[10px]">
+                    <Text
+                      className="text-[10px]"
+                      style={{ color: "rgba(255,255,255,0.6)" }}
+                    >
+                      En metas
+                    </Text>
+                    <Text className="text-card text-[13px] font-semibold">
+                      ${totalAhorrado.toLocaleString("es-CL")}
+                    </Text>
+                  </View>
                 </View>
                 <MiniBadge
                   percent={estadoPresupuesto.porcentajeDisponible}
@@ -619,8 +615,10 @@ export default function ScreenDashboard({
             className="flex-1 justify-center p-[20px]"
             style={{ backgroundColor: "rgba(0,0,0,0.4)" }}
           >
-            <View className="bg-card rounded-[14px] p-[20px]">
-              <View className="flex-row justify-between items-center mb-[12px]">
+            <View
+              className="bg-card rounded-[14px] p-[20px]"
+              style={layout.modal}
+            >              <View className="flex-row justify-between items-center mb-[12px]">
                 <Text className="text-[16px] font-bold text-text">
                   Editar monto del gasto
                 </Text>

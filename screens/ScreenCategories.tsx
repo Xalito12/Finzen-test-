@@ -1,33 +1,14 @@
 // screens/ScreenCategories.tsx
 import { Feather } from "@expo/vector-icons";
 import { useIsFocused } from "@react-navigation/native";
+import React, { useCallback, useEffect, useMemo, useRef, useState, } from "react";
+import { Alert, Modal, Pressable, ScrollView, Text, TextInput, TouchableOpacity, View, } from "react-native";
+import { layout } from "../components/layout";
+import { consultarCategorias, resumirGastos, type CategoriaResumen, } from "../database/consultasFinanzas";
+import { supabase } from "../database/supabase";
 import TutorialCard from "../tutorial/TutorialCard";
 import { useTutorial } from "../tutorial/TutorialProvider";
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
-import {
-  Alert,
-  Modal,
-  Pressable,
-  ScrollView,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from "react-native";
-import { supabase } from "../database/supabase";
 import { confirmarEliminacion } from "../utils/confirmarEliminacion";
-import {
-  consultarCategorias,
-  resumirGastos,
-  type CategoriaResumen,
-} from "../database/consultasFinanzas";
-
 type CategoriaConTotales = CategoriaResumen & { gastado: number };
 type IdCategoria = CategoriaResumen["id"];
 
@@ -93,7 +74,7 @@ export default function ScreenCategories({
       const porcentaje = Math.round(
         (categoria.gastado /
           (Number.isFinite(limite) && limite > 0 ? limite : 1)) *
-          100,
+        100,
       );
       if (porcentaje > 100) sobrepasadas++;
       else if (porcentaje >= 80) enAlerta++;
@@ -671,35 +652,49 @@ export default function ScreenCategories({
           </TouchableOpacity>
         </View>
       </ScrollView>
-      <Modal
+            <Modal
         visible={mostrarSugerencias && isFocused}
         transparent
         animationType="slide"
         onRequestClose={() => {
-          if (!agregando) setMostrarSugerencias(false);
+          if (!agregando) {
+            setMostrarSugerencias(false);
+          }
         }}
       >
         <View
           className="flex-1 justify-center p-[24px]"
-          style={{ backgroundColor: "rgba(0,0,0,0.4)" }}
+          style={{
+            backgroundColor: "rgba(0,0,0,0.4)",
+          }}
         >
-          <View className="bg-card rounded-[20px] p-[20px] max-h-[85%]">
+          <View
+            className="bg-card rounded-[20px] p-[20px] max-h-[85%]"
+            style={layout.modal}
+          >
             <View className="flex-row items-center justify-between mb-[12px]">
               <Text className="text-[20px] font-bold text-text flex-1">
                 Agregar categoría
               </Text>
+
               <TouchableOpacity
                 accessibilityLabel="Cerrar sugerencias"
                 disabled={agregando}
                 onPress={() => setMostrarSugerencias(false)}
                 className="p-[10px]"
               >
-                <Feather name="x" size={24} color="#512DA8" />
+                <Feather
+                  name="x"
+                  size={24}
+                  color="#512DA8"
+                />
               </TouchableOpacity>
             </View>
+
             <Text className="text-text-secondary mb-[12px]">
               Toca una para agregarla. Puedes editar su límite después.
             </Text>
+
             <ScrollView keyboardShouldPersistTaps="handled">
               {categoriasSugeridas
                 .filter(
@@ -716,36 +711,55 @@ export default function ScreenCategories({
                     disabled={agregando}
                     onPress={() => agregarSugerida(c)}
                     className="flex-row items-center gap-[12px] py-[14px] border-b-[1px] border-bg"
-                    style={{ opacity: agregando ? 0.5 : 1 }}
+                    style={{
+                      opacity: agregando ? 0.5 : 1,
+                    }}
                   >
-                    <Text className="text-[24px]">{c.icono}</Text>
+                    <Text className="text-[24px]">
+                      {c.icono}
+                    </Text>
+
                     <View className="flex-1">
                       <Text className="text-text font-semibold text-[16px]">
                         {c.nombre}
                       </Text>
+
                       <Text className="text-text-secondary text-[12px]">
-                        Límite mensual: ${c.limite.toLocaleString("es-CL")}
+                        Límite mensual: $
+                        {c.limite.toLocaleString("es-CL")}
                       </Text>
                     </View>
-                    <Feather name="plus" size={20} color="#512DA8" />
+
+                    <Feather
+                      name="plus"
+                      size={20}
+                      color="#512DA8"
+                    />
                   </TouchableOpacity>
                 ))}
+
               <TouchableOpacity
                 disabled={agregando}
                 onPress={nuevaCategoria}
                 className="flex-row items-center gap-[12px] py-[18px]"
               >
-                <Feather name="edit-3" size={24} color="#512DA8" />
+                <Feather
+                  name="edit-3"
+                  size={24}
+                  color="#512DA8"
+                />
+
                 <Text className="text-primary text-[16px] font-bold">
                   Otros…
                 </Text>
               </TouchableOpacity>
             </ScrollView>
-            {agregando && (
+
+            {agregando ? (
               <Text className="text-primary mt-[12px]">
                 Agregando categoría…
               </Text>
-            )}
+            ) : null}
           </View>
         </View>
       </Modal>

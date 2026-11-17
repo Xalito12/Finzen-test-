@@ -1,8 +1,6 @@
 // screens/ScreenProfile.tsx
 import { Feather } from "@expo/vector-icons";
 import { useIsFocused } from "@react-navigation/native";
-import TutorialCard from "../tutorial/TutorialCard";
-import { useTutorial } from "../tutorial/TutorialProvider";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -17,8 +15,10 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { layout } from "../components/layout";
 import { supabase } from "../database/supabase";
-
+import TutorialCard from "../tutorial/TutorialCard";
+import { useTutorial } from "../tutorial/TutorialProvider";
 export default function ScreenProfile({
   onNav,
 }: {
@@ -328,8 +328,10 @@ export default function ScreenProfile({
           className="flex-1 justify-end"
           style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
         >
-          <View className="bg-card rounded-tl-[24px] rounded-tr-[24px] p-[24px] max-h-[85%]">
-            <View className="flex-row justify-between items-center mb-[20px]">
+          <View
+            className="bg-card rounded-tl-[24px] rounded-tr-[24px] p-[24px] max-h-[85%]"
+            style={layout.modal}
+          >            <View className="flex-row justify-between items-center mb-[20px]">
               <Text className="text-[18px] font-bold text-text">
                 Editar Perfil
               </Text>
