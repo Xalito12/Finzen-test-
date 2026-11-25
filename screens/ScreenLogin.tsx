@@ -3,13 +3,21 @@ import React, { useState } from "react";
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, TouchableOpacity, View, } from "react-native";
 import { supabase } from "../database/supabase";
 
+// Pantalla para iniciar sesión mediante correo y contraseña.
+// Recibe onNav para cambiar de pantalla utilizando un destino numérico.
 export default function ScreenLogin({ onNav }: { onNav: (i: number) => void }) {
+  // Guarda las credenciales ingresadas en el formulario.
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+
+  // Controla el indicador de carga y la visibilidad de la contraseña.
   const [cargando, setCargando] = useState(false);
   const [verPassword, setVerPassword] = useState(false);
 
+  // Valida los campos e inicia sesión en Supabase.
+  // Luego consulta el sueldo para decidir si abre Inicio o la configuración inicial.
   const handleLogin = async () => {
+    // Solicita completar ambos campos antes de intentar iniciar sesión.
     if (!email.trim() || !password.trim()) {
       Alert.alert("Atención", "Por favor ingresa tu correo y contraseña.");
       return;
@@ -17,28 +25,37 @@ export default function ScreenLogin({ onNav }: { onNav: (i: number) => void }) {
 
     try {
       setCargando(true);
+
       const { data, error } = await supabase.auth.signInWithPassword({
         email: email.trim(),
         password: password,
       });
 
+      // Muestra el error y detiene el proceso si falla la autenticación.
       if (error) {
         Alert.alert("Error de inicio de sesión", error.message);
         return;
       }
 
+      // Consulta el perfil únicamente cuando se obtiene una sesión válida.
       if (data.session) {
         const { data: perfil, error: errorPerfil } = await supabase
           .from("perfiles")
           .select("sueldo")
           .eq("id", data.session.user.id)
           .maybeSingle();
+
+        // Envía el error al bloque catch si no se pudo consultar el perfil.
         if (errorPerfil) throw errorPerfil;
+
+        // Abre Inicio si existe un sueldo positivo; en otro caso, pide configurarlo.
         onNav(Number(perfil?.sueldo) > 0 ? 2 : 1);
       }
     } catch (err: any) {
+      // Informa los errores producidos durante el proceso.
       Alert.alert("Error inesperado", err.message || "Ocurrió un error.");
     } finally {
+      // Finaliza el indicador de carga tanto si la operación funciona como si falla.
       setCargando(false);
     }
   };
@@ -55,6 +72,7 @@ export default function ScreenLogin({ onNav }: { onNav: (i: number) => void }) {
           padding: 24,
         }}
       >
+        {/* Encabezado con el icono y el mensaje de bienvenida. */}
         <View className="items-center mb-[32px]">
           <View className="w-[64px] h-[64px] rounded-[32px] bg-primary items-center justify-center mb-[16px]">
             <Feather name="log-in" size={30} color="#fff" />
@@ -102,6 +120,8 @@ export default function ScreenLogin({ onNav }: { onNav: (i: number) => void }) {
               secureTextEntry={!verPassword}
               className="flex-1 py-[12px] px-[10px] text-text"
             />
+
+            {/* Alterna entre mostrar y ocultar la contraseña. */}
             <TouchableOpacity onPress={() => setVerPassword(!verPassword)}>
               <Feather
                 name={verPassword ? "eye" : "eye-off"}
@@ -112,6 +132,7 @@ export default function ScreenLogin({ onNav }: { onNav: (i: number) => void }) {
           </View>
 
           {/* Botón de Ingreso */}
+          {/* Se desactiva y muestra un indicador mientras se procesa la solicitud. */}
           <TouchableOpacity
             onPress={handleLogin}
             disabled={cargando}

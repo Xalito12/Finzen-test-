@@ -1,4 +1,3 @@
-// screens/ScreenDashboard.tsx
 import { Feather } from "@expo/vector-icons";
 import { useIsFocused } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
@@ -14,6 +13,8 @@ import { calcularEstadoPresupuesto } from "../models/estadoPresupuesto";
 import { generarNotificaciones } from "../models/notificaciones";
 import TutorialCard from "../tutorial/TutorialCard";
 import { confirmarEliminacion } from "../utils/confirmarEliminacion";
+
+// Define la información necesaria para mostrar una categoría en Inicio.
 interface CategoriaInicio {
   id: number | string;
   name: string;
@@ -23,6 +24,9 @@ interface CategoriaInicio {
   icono: string;
 }
 
+// Muestra un gasto con su categoría, icono y monto.
+// Los botones ejecutan las acciones de editar o eliminar recibidas como propiedades.
+// memo permite evitar renderizados cuando sus propiedades no cambian.
 const FilaGasto = memo(function FilaGasto({
   gasto,
   onEditar,
@@ -43,6 +47,8 @@ const FilaGasto = memo(function FilaGasto({
       <Text className="text-[16px] font-bold text-error mr-[8px]">
         ${Number(gasto.monto).toLocaleString("es-CL")}
       </Text>
+
+      {/* Accesos para editar o solicitar la eliminación de este gasto. */}
       <View className="flex-row gap-[4px]">
         <Pressable
           onPress={() => onEditar(gasto)}
@@ -69,11 +75,14 @@ const FilaGasto = memo(function FilaGasto({
   );
 });
 
+// Pantalla principal que muestra el saldo, los ahorros, las categorías y los gastos.
+// Permite modificar el sueldo, editar montos y eliminar gastos.
 export default function ScreenDashboard({
   onNav,
 }: {
   onNav: (i: number) => void;
 }) {
+  // Identifica si Inicio está abierto y controla los indicadores de carga.
   const active = useIsFocused();
   const [refrescando, setRefrescando] = useState(false);
   const [numeroAlertas, setNumeroAlertas] = useState(0);
@@ -81,59 +90,87 @@ export default function ScreenDashboard({
   const [perfilCargado, setPerfilCargado] = useState(false);
   const [cargandoPerfil, setCargandoPerfil] = useState(true);
   const [errorPerfil, setErrorPerfil] = useState(false);
+
+  // Guarda los datos del usuario y controla la edición de su sueldo.
   const [nombreUsuario, setNombreUsuario] = useState("Usuario");
   const [sueldoTotal, setSueldoTotal] = useState(0);
   const [editandoSueldo, setEditandoSueldo] = useState(false);
   const [nuevoSueldoInput, setNuevoSueldoInput] = useState("");
 
+  // Conserva los gastos, el ahorro registrado y las categorías del resumen.
   const [listaGastos, setListaGastos] = useState<GastoResumen[]>([]);
   const [totalGastado, setTotalGastado] = useState(0);
   const [totalAhorrado, setTotalAhorrado] = useState(0);
   const [categoriasDinamicas, setCategoriasDinamicas] = useState<
     CategoriaInicio[]
   >([]);
+
+  // Identifica el gasto que se está editando y su nuevo monto.
   const [idEditar, setIdEditar] = useState<GastoResumen["id"] | null>(null);
   const [montoEditar, setMontoEditar] = useState("");
 
+  // Permite desplazar la lista hasta la sección Gestión de Gastos.
   const listaRef = useRef<FlatList<GastoResumen>>(null);
   const posicionGastos = useRef(0);
+
+  // Identifica la última consulta para descartar respuestas anteriores.
   const ultimaCarga = useRef(0);
+
+  // Mantiene referencias a los datos y al estado actual de la pantalla.
   const gastosActuales = useRef(listaGastos);
   gastosActuales.current = listaGastos;
   const pantallaActiva = useRef(active);
   pantallaActiva.current = active;
   const montado = useRef(true);
+
+  // Registra los gastos que tienen una eliminación en proceso.
   const borrandoGastos = useRef(new Set<GastoResumen["id"]>());
+
+  // Indica si el componente sigue montado.
   useEffect(() => {
     montado.current = true;
+
     return () => {
       montado.current = false;
     };
   }, []);
 
+  // Consulta en paralelo las finanzas y las metas.
+  // Calcula los totales y prepara los datos que aparecen en Inicio.
   const cargarInicio = useCallback(async () => {
     const solicitud = ++ultimaCarga.current;
+
     try {
       const [datos, metas] = await Promise.all([consultarInicio(), listarMetas()]);
       const { user, perfil, gastos, categorias } = datos;
+
       // Descarta respuestas de una pantalla anterior o de una consulta superada.
       if (solicitud !== ultimaCarga.current) return;
+
       const resumen = resumirGastos(gastos);
+
+      // Suma el dinero ahorrado en todas las metas.
       const ahorroEnMetas = metas.reduce(
         (total, meta) => total + Number(meta.monto_ahorrado),
         0,
       );
+
       const alertas = generarNotificaciones(datos, metas).length;
+
+      // Obtiene un nombre disponible desde el perfil, los metadatos o el correo.
       setNombreUsuario(
         perfil?.nombre ||
         user.user_metadata?.nombre ||
         user.email?.split("@")[0] ||
         "Usuario",
       );
+
       setSueldoTotal(Number(perfil?.sueldo) || 0);
       setListaGastos(gastos);
       setTotalGastado(resumen.total);
       setTotalAhorrado(ahorroEnMetas);
+
+      // Prepara cada categoría con su gasto acumulado y sus datos visuales.
       setCategoriasDinamicas(
         categorias.map((cat) => ({
           id: cat.id,
@@ -144,14 +181,18 @@ export default function ScreenDashboard({
           icono: cat.icono || "🏷️",
         })),
       );
+
       setNumeroAlertas(alertas);
       setPerfilCargado(true);
       setErrorPerfil(false);
     } catch (err: any) {
+      // Ignora los errores de consultas que ya fueron reemplazadas.
       if (solicitud !== ultimaCarga.current) return;
+
       setErrorPerfil(true);
       console.error("Error al actualizar Inicio:", err.message);
     } finally {
+      // Finaliza los indicadores de carga solo para la consulta más reciente.
       if (solicitud === ultimaCarga.current) {
         setCargandoPerfil(false);
         setRefrescando(false);
@@ -159,22 +200,30 @@ export default function ScreenDashboard({
     }
   }, []);
 
+  // Actualiza los datos al entrar en Inicio y cierra las ediciones anteriores.
+  // Al salir, invalida las consultas pendientes.
   useEffect(() => {
+    // Detiene el indicador de actualización cuando la pantalla está inactiva.
     if (!active) {
       setRefrescando(false);
       return;
     }
+
     setEditandoSueldo(false);
     setIdEditar(null);
     cargarInicio();
+
     return () => {
       ultimaCarga.current += 1;
     };
   }, [active, cargarInicio]);
 
-  // 3. Modificar sueldo directamente en Supabase
+  // 3. Modificar sueldo directamente en Supabase.
+  // Valida el monto, lo actualiza en el perfil y cierra el formulario.
   const guardarNuevoSueldo = async () => {
     const valorLimpio = parseInt(nuevoSueldoInput.replace(/[^0-9]/g, ""));
+
+    // Rechaza un sueldo inválido, igual a cero o negativo.
     if (isNaN(valorLimpio) || valorLimpio <= 0) {
       Alert.alert("Atención", "Ingresa un monto de sueldo válido.");
       return;
@@ -184,6 +233,8 @@ export default function ScreenDashboard({
       const {
         data: { user },
       } = await supabase.auth.getUser();
+
+      // Impide actualizar el sueldo cuando no hay un usuario autenticado.
       if (!user) {
         Alert.alert("Error", "No hay sesión activa.");
         return;
@@ -194,6 +245,7 @@ export default function ScreenDashboard({
         .update({ sueldo: valorLimpio })
         .eq("id", user.id);
 
+      // Muestra el error y mantiene el formulario si falla la actualización.
       if (error) {
         Alert.alert("Error al actualizar", error.message);
         return;
@@ -208,41 +260,54 @@ export default function ScreenDashboard({
     }
   };
 
-  // 4. Borrar gasto de Supabase
+  // 4. Borrar gasto de Supabase.
+  // Evita eliminaciones simultáneas del mismo gasto y actualiza el resumen al terminar.
   const eliminarGasto = useCallback(
     async (idBorrar: GastoResumen["id"]) => {
+      // No continúa si el gasto ya se está eliminando o el componente fue desmontado.
       if (borrandoGastos.current.has(idBorrar) || !montado.current) return;
+
       borrandoGastos.current.add(idBorrar);
+
       try {
         const { error } = await supabase
           .from("gastos")
           .delete()
           .eq("id", idBorrar);
 
+        // Informa el error si Supabase no pudo eliminar el gasto.
         if (error) {
           Alert.alert("Error al eliminar", error.message);
           return;
         }
 
+        // Cierra la edición si correspondía al gasto eliminado.
         setIdEditar((actual) => (actual === idBorrar ? null : actual));
         cargarInicio();
       } catch (err: any) {
+        // Muestra el error únicamente si el componente sigue montado.
         if (montado.current) Alert.alert("Error", err.message);
       } finally {
+        // Libera el identificador cuando termina el intento de eliminación.
         borrandoGastos.current.delete(idBorrar);
       }
     },
     [cargarInicio],
   );
 
+  // Busca el gasto actual y solicita confirmación antes de eliminarlo.
   const borrarGasto = useCallback(
     (id: GastoResumen["id"]) => {
       const gasto = gastosActuales.current.find((item) => item.id === id);
+
+      // Evita confirmar un gasto inexistente o que ya se está eliminando.
       if (!gasto || borrandoGastos.current.has(id)) return;
+
       confirmarEliminacion(
         "Eliminar gasto",
         `¿Quieres eliminar el gasto de «${gasto.categoria}» por $${Number(gasto.monto).toLocaleString("es-CL")}?`,
         () => {
+          // Ejecuta el borrado si la pantalla sigue activa y el gasto todavía existe en la lista.
           if (
             montado.current &&
             pantallaActiva.current &&
@@ -256,28 +321,35 @@ export default function ScreenDashboard({
     [eliminarGasto],
   );
 
+  // Selecciona un gasto y carga su monto en el formulario de edición.
   const prepararEdicion = useCallback((gasto: GastoResumen) => {
     setIdEditar(gasto.id);
     setMontoEditar(gasto.monto.toString());
   }, []);
 
-  // 5. Editar monto de un gasto en Supabase
+  // 5. Editar monto de un gasto en Supabase.
+  // Valida el nuevo monto, guarda el cambio y vuelve a cargar el resumen.
   const guardarEdicionGasto = async () => {
+    // Evita guardar sin un gasto seleccionado o mientras ya hay un guardado en proceso.
     if (idEditar === null || guardandoGasto) return;
+
     const montoNum = parseInt(montoEditar.replace(/[^0-9]/g, ""));
 
+    // Rechaza un monto inválido, igual a cero o negativo.
     if (isNaN(montoNum) || montoNum <= 0) {
       Alert.alert("Atención", "Ingresa un monto válido.");
       return;
     }
 
     setGuardandoGasto(true);
+
     try {
       const { error } = await supabase
         .from("gastos")
         .update({ monto: montoNum })
         .eq("id", idEditar);
 
+      // Informa el error si no fue posible actualizar el monto.
       if (error) {
         Alert.alert("Error al actualizar", error.message);
         return;
@@ -289,10 +361,13 @@ export default function ScreenDashboard({
     } catch (err: any) {
       Alert.alert("Error", err.message);
     } finally {
+      // Habilita nuevamente los controles al terminar la operación.
       setGuardandoGasto(false);
     }
   };
 
+  // Descuenta del sueldo los gastos y el dinero reservado en metas.
+  // Con ese total calcula el estado del presupuesto y el saldo disponible.
   const totalDescontado = totalGastado + totalAhorrado;
   const estadoPresupuesto = calcularEstadoPresupuesto(
     sueldoTotal,
@@ -300,6 +375,7 @@ export default function ScreenDashboard({
   );
   const saldoDisponible = sueldoTotal - totalDescontado;
 
+  // Muestra la carga inicial o la opción de reintentar hasta tener el primer resumen.
   if (!perfilCargado) {
     return (
       <View className="flex-1 bg-bg items-center justify-center">
@@ -310,6 +386,8 @@ export default function ScreenDashboard({
             <Text className="text-text-secondary">
               No se pudo cargar el resumen.
             </Text>
+
+            {/* Vuelve a consultar los datos después de un error de carga. */}
             <TouchableOpacity
               onPress={() => {
                 setCargandoPerfil(true);
@@ -327,16 +405,20 @@ export default function ScreenDashboard({
 
   return (
     <View className="flex-1 bg-bg">
+      {/* Avisa si falló una actualización y se conservan los datos anteriores. */}
       {errorPerfil && (
         <Text className="text-error p-[12px]">
           No se pudo actualizar el resumen. Se muestran los últimos datos
           cargados.
         </Text>
       )}
+
+      {/* Muestra el tutorial y permite desplazarse hasta Gestión de Gastos. */}
       <TutorialCard
         pantalla="Inicio"
         onNav={onNav}
         onAccion={(accion) => {
+          // Desplaza la lista cuando el tutorial solicita mostrar los gastos.
           if (accion === "ver_gastos") {
             listaRef.current?.scrollToOffset({
               offset: Math.max(0, posicionGastos.current - 12),
@@ -345,6 +427,8 @@ export default function ScreenDashboard({
           }
         }}
       />
+
+      {/* Lista de gastos con el resumen financiero como encabezado. */}
       <FlatList<GastoResumen>
         ref={listaRef}
         data={listaGastos}
@@ -360,6 +444,7 @@ export default function ScreenDashboard({
         keyboardShouldPersistTaps="handled"
         refreshing={refrescando}
         onRefresh={() => {
+          // Actualiza el resumen al deslizar la lista hacia abajo.
           setRefrescando(true);
           cargarInicio();
         }}
@@ -378,6 +463,8 @@ export default function ScreenDashboard({
                   {nombreUsuario} 👋
                 </Text>
               </View>
+
+              {/* Abre Notificaciones y muestra la cantidad de alertas activas. */}
               <Pressable
                 onPress={() => onNav(6)}
                 accessibilityRole="button"
@@ -413,6 +500,7 @@ export default function ScreenDashboard({
             >
               <View className="flex-row justify-between items-center gap-[12px]">
                 <View className="flex-1">
+                  {/* Saldo disponible después de descontar gastos y ahorros. */}
                   <Text
                     className="text-[11px]"
                     style={{ color: "rgba(255,255,255,0.7)" }}
@@ -425,6 +513,8 @@ export default function ScreenDashboard({
                   >
                     ${saldoDisponible.toLocaleString("es-CL")}
                   </Text>
+
+                  {/* Montos de gastos y sueldo configurado. */}
                   <View className="flex-row gap-[14px] mt-[12px] items-center">
                     <View>
                       <Text
@@ -445,6 +535,8 @@ export default function ScreenDashboard({
                         >
                           Sueldo
                         </Text>
+
+                        {/* Abre la edición con el sueldo actual como valor inicial. */}
                         <TouchableOpacity
                           onPress={() => {
                             setNuevoSueldoInput(sueldoTotal.toString());
@@ -459,6 +551,8 @@ export default function ScreenDashboard({
                       </Text>
                     </View>
                   </View>
+
+                  {/* Total de dinero reservado en las metas de ahorro. */}
                   <View className="flex-row flex-wrap items-center gap-[6px] mt-[10px]">
                     <Text
                       className="text-[10px]"
@@ -471,12 +565,16 @@ export default function ScreenDashboard({
                     </Text>
                   </View>
                 </View>
+
+                {/* Aro con el porcentaje disponible y el color del estado actual. */}
                 <MiniBadge
                   percent={estadoPresupuesto.porcentajeDisponible}
                   color={estadoPresupuesto.color}
                   status={estadoPresupuesto.etiqueta}
                 />
               </View>
+
+              {/* Descripción del estado del presupuesto. */}
               <View className="mt-[16px]">
                 <Text
                   className="font-bold text-[13px]"
@@ -531,6 +629,7 @@ export default function ScreenDashboard({
             </View>
 
             <View className="gap-[10px] mb-[20px]">
+              {/* Invita a crear la primera categoría si no hay ninguna disponible. */}
               {categoriasDinamicas.length === 0 && (
                 <View className="bg-card rounded-[14px] p-[16px] border-[1px] border-border">
                   <Text className="text-text font-semibold">
@@ -552,10 +651,15 @@ export default function ScreenDashboard({
                   </Pressable>
                 </View>
               )}
+
+              {/* Prepara una tarjeta con el gasto y la barra de cada categoría. */}
               {categoriasDinamicas.map((c) => {
                 const p = Math.round((c.spent / c.limit) * 100);
+
+                // Usa rojo desde el 100 %, amarillo desde el 80 % y el color propio en otro caso.
                 const colorBarra =
                   p >= 100 ? "#C62828" : p >= 80 ? "#F9A825" : c.color;
+
                 return (
                   <View
                     key={c.id || c.name}
@@ -578,6 +682,7 @@ export default function ScreenDashboard({
               })}
             </View>
 
+            {/* Guarda la posición de esta sección para que el tutorial pueda mostrarla. */}
             <View
               onLayout={({ nativeEvent }) => {
                 posicionGastos.current = nativeEvent.layout.y;
@@ -590,6 +695,7 @@ export default function ScreenDashboard({
         }
         ListEmptyComponent={
           <View className="bg-card p-[14px]">
+            {/* Mensaje de la lista cuando no existen gastos registrados. */}
             <Text className="text-text-secondary text-center my-[10px]">
               Aún no hay gastos registrados.
             </Text>
@@ -599,14 +705,18 @@ export default function ScreenDashboard({
           <View className="bg-card h-[12px] rounded-b-[14px]" />
         }
       />
+
+      {/* Ventana de edición que se abre al seleccionar un gasto. */}
       <Modal
         visible={idEditar !== null}
         transparent
         animationType="fade"
         onRequestClose={() => {
+          // Permite cerrar la ventana si no hay un guardado en proceso.
           if (!guardandoGasto) setIdEditar(null);
         }}
       >
+        {/* Ajusta el espacio de la ventana cuando aparece el teclado. */}
         <KeyboardAvoidingView
           behavior={Platform.OS === "ios" ? "padding" : "height"}
           style={{ flex: 1 }}
@@ -618,10 +728,13 @@ export default function ScreenDashboard({
             <View
               className="bg-card rounded-[14px] p-[20px]"
               style={layout.modal}
-            >              <View className="flex-row justify-between items-center mb-[12px]">
+            >
+              <View className="flex-row justify-between items-center mb-[12px]">
                 <Text className="text-[16px] font-bold text-text">
                   Editar monto del gasto
                 </Text>
+
+                {/* Cierra la edición; se desactiva mientras se guarda el cambio. */}
                 <Pressable
                   disabled={guardandoGasto}
                   onPress={() => setIdEditar(null)}
@@ -633,6 +746,8 @@ export default function ScreenDashboard({
                   <Feather name="x" size={20} color="#8A849C" />
                 </Pressable>
               </View>
+
+              {/* Campo para ingresar el nuevo monto del gasto seleccionado. */}
               <Text className="text-[12px] font-semibold text-text-secondary mb-[4px]">
                 Nuevo monto ($)
               </Text>
@@ -645,6 +760,8 @@ export default function ScreenDashboard({
                 accessibilityLabel="Nuevo monto del gasto"
                 className="bg-bg rounded-[10px] px-[12px] h-[44px] mb-[16px] text-[15px] text-text"
               />
+
+              {/* Guarda el cambio y muestra un indicador durante la operación. */}
               <Pressable
                 disabled={guardandoGasto}
                 onPress={guardarEdicionGasto}

@@ -1,53 +1,59 @@
-// screens/ScreenRegister.tsx
 import { Feather } from "@expo/vector-icons";
 import React, { useRef, useState } from "react";
-import {
-  ActivityIndicator,
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, TouchableOpacity, View, } from "react-native";
 import { supabase } from "../database/supabase";
 
+// Pantalla para crear una cuenta mediante correo y contraseña.
+// Prepara el perfil cuando existe una sesión y permite continuar con la configuración.
 export default function ScreenRegister({
   onNav,
 }: {
   onNav: (i: number) => void;
 }) {
+  // Guarda los datos ingresados en el formulario.
   const [nombre, setNombre] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+
+  // Controla el indicador de carga y la visibilidad de las contraseñas.
   const [cargando, setCargando] = useState(false);
   const [verPassword, setVerPassword] = useState(false);
+
+  // Bloquea nuevos intentos mientras se procesa un registro.
   const registroEnCurso = useRef(false);
 
+  // Valida el formulario, solicita el registro y prepara los datos iniciales del perfil.
+  // Si no se obtiene una sesión, muestra las indicaciones para confirmar el correo.
   const handleRegistro = async () => {
+    // Evita procesar más de un registro al mismo tiempo.
     if (registroEnCurso.current) return;
+
+    // Solicita completar el nombre, el correo y la contraseña.
     if (!nombre.trim() || !email.trim() || !password.trim()) {
       Alert.alert("Atención", "Por favor completa todos los campos.");
       return;
     }
 
+    // Rechaza el registro si las contraseñas ingresadas son diferentes.
     if (password !== confirmPassword) {
       Alert.alert("Error", "Las contraseñas no coinciden.");
       return;
     }
 
+    // Exige una contraseña de al menos seis caracteres.
     if (password.length < 6) {
       Alert.alert("Error", "La contraseña debe tener al menos 6 caracteres.");
       return;
     }
 
     registroEnCurso.current = true;
+
     try {
       setCargando(true);
-      // Pasamos 'nombre' en options.data para que quede en auth.users
+
+      // Pasamos 'nombre' en options.data para que quede en auth.users.
+      // También dejamos marcado que el usuario tiene pendiente realizar el tutorial.
       const { data, error } = await supabase.auth.signUp({
         email: email.trim(),
         password: password,
@@ -56,11 +62,14 @@ export default function ScreenRegister({
         },
       });
 
+      // Muestra el error y detiene el proceso si falla la solicitud de registro.
       if (error) {
         Alert.alert("Error al registrar", error.message);
         return;
       }
 
+      // Si falta la sesión o el usuario, muestra las indicaciones para confirmar el correo.
+      // El botón del aviso permite abrir la pantalla de inicio de sesión.
       if (!data?.session || !data.user) {
         Alert.alert(
           "Revisa tu correo",
@@ -82,6 +91,9 @@ export default function ScreenRegister({
         })
         .select("id")
         .single();
+
+      // Si falla la preparación del perfil o no se confirma su resultado,
+      // permite continuar a la configuración para volver a intentarlo.
       if (errorPerfil || !perfil) {
         Alert.alert(
           "Completa tu configuración",
@@ -90,10 +102,13 @@ export default function ScreenRegister({
         );
         return;
       }
+
+      // Continúa con la configuración inicial del sueldo y del día de pago.
       onNav(1);
     } catch (err: any) {
       Alert.alert("Error inesperado", err.message || "Ocurrió un error.");
     } finally {
+      // Libera el bloqueo y finaliza el indicador de carga al terminar el intento.
       registroEnCurso.current = false;
       setCargando(false);
     }
@@ -112,6 +127,7 @@ export default function ScreenRegister({
           padding: 24,
         }}
       >
+        {/* Encabezado con el icono y el mensaje de presentación. */}
         <View className="items-center mb-[28px]">
           <View className="w-[64px] h-[64px] rounded-[32px] bg-primary items-center justify-center mb-[16px]">
             <Feather name="user-plus" size={30} color="#fff" />
@@ -122,6 +138,7 @@ export default function ScreenRegister({
           </Text>
         </View>
 
+        {/* Los campos del formulario se desactivan durante el registro. */}
         <View
           className="bg-card rounded-[16px] p-[20px]"
           style={{ elevation: 2 }}
@@ -178,6 +195,8 @@ export default function ScreenRegister({
               secureTextEntry={!verPassword}
               className="flex-1 py-[12px] px-[10px] text-text"
             />
+
+            {/* Alterna la visibilidad de ambos campos de contraseña. */}
             <TouchableOpacity onPress={() => setVerPassword(!verPassword)}>
               <Feather
                 name={verPassword ? "eye" : "eye-off"}
@@ -205,6 +224,7 @@ export default function ScreenRegister({
             />
           </View>
 
+          {/* Inicia el registro y muestra un indicador mientras se procesa. */}
           <TouchableOpacity
             onPress={handleRegistro}
             disabled={cargando}
@@ -220,6 +240,7 @@ export default function ScreenRegister({
           </TouchableOpacity>
         </View>
 
+        {/* Abre el inicio de sesión si el usuario ya tiene una cuenta. */}
         <TouchableOpacity
           disabled={cargando}
           onPress={() => onNav(10)}

@@ -1,3 +1,4 @@
+// Define las pantallas donde pueden mostrarse los pasos del tutorial.
 export type PantallaTutorial =
   | "Inicio"
   | "Categorias"
@@ -6,14 +7,18 @@ export type PantallaTutorial =
   | "Metas"
   | "Perfil";
 
+// Acciones de la aplicación que el tutorial puede reconocer.
 export type AccionTutorial =
   | "categoria_creada"
   | "gasto_creado"
   | "categorias_abiertas";
 
+// Acciones que el tutorial puede solicitar a la pantalla actual.
 export type AccionInterfazTutorial = "crear_categoria" | "ver_gastos";
 
+// Define la información necesaria para presentar cada paso del tutorial.
 export interface PasoTutorial {
+  // Identificador del paso.
   id:
     | "inicio"
     | "categorias"
@@ -23,13 +28,19 @@ export interface PasoTutorial {
     | "notificaciones"
     | "metas"
     | "perfil";
+
+  // Pantalla y código de navegación asociados al paso.
   pantalla: PantallaTutorial;
   ruta: number;
+
+  // Contenido que se muestra en la tarjeta y texto del botón para continuar.
   titulo: string;
   explicaciones: readonly string[];
   siguiente: string;
 }
 
+// Contiene los pasos en el orden del recorrido.
+// Cada paso indica dónde se muestra y qué debe explicar al usuario.
 export const pasosTutorial: readonly PasoTutorial[] = [
   {
     id: "inicio",
@@ -121,6 +132,9 @@ export const pasosTutorial: readonly PasoTutorial[] = [
   },
 ];
 
+// Devuelve un índice válido para acceder a los pasos.
+// Si recibe un entero, lo limita entre el primer y el último paso.
+// Si recibe otro tipo de valor o un número no entero, devuelve 0.
 export function indiceSeguroTutorial(valor: unknown): number {
   return typeof valor === "number" && Number.isInteger(valor)
     ? Math.min(pasosTutorial.length - 1, Math.max(0, valor))

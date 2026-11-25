@@ -1,42 +1,38 @@
-// screens/ScreenProfile.tsx
 import { Feather } from "@expo/vector-icons";
 import { useIsFocused } from "@react-navigation/native";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import {
-  ActivityIndicator,
-  Alert,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  Pressable,
-  ScrollView,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, Text, TextInput, TouchableOpacity, View, } from "react-native";
 import { layout } from "../components/layout";
 import { supabase } from "../database/supabase";
 import TutorialCard from "../tutorial/TutorialCard";
 import { useTutorial } from "../tutorial/TutorialProvider";
+
+// Muestra los datos personales y financieros del usuario.
+// Permite editar el perfil, repetir el tutorial, abrir otras secciones y cerrar sesión.
 export default function ScreenProfile({
   onNav,
 }: {
   onNav: (i: number) => void;
 }) {
+  // Obtiene la acción para reiniciar el tutorial y comprueba si Perfil está abierto.
   const { reiniciar } = useTutorial();
   const isFocused = useIsFocused();
   const focusedRef = useRef(isFocused);
   focusedRef.current = isFocused;
+
+  // Identifica la consulta más reciente y recuerda si ya se cargó el perfil.
   const ultimaCarga = useRef(0);
   const perfilCargado = useRef(false);
+
+  // Datos que se muestran en la pantalla.
   const [nombre, setNombre] = useState("Usuario");
   const [email, setEmail] = useState("");
   const [sueldo, setSueldo] = useState("0");
   const [diaPago, setDiaPago] = useState("1");
   const [cargando, setCargando] = useState(true);
 
-  // Estados del modal de edición
+  // Estados del modal de edición.
+  // La referencia permite comprobar si está abierto al terminar una consulta.
   const [modalVisible, setModalVisible] = useState(false);
   const modalVisibleRef = useRef(modalVisible);
   modalVisibleRef.current = modalVisible;
@@ -45,28 +41,46 @@ export default function ScreenProfile({
   const [editDiaPago, setEditDiaPago] = useState("1");
   const [guardando, setGuardando] = useState(false);
 
+  // Opciones disponibles para seleccionar el día de pago.
   const dias = [1, 5, 7, 10, 14, 15, 28, 30];
 
   // Refresca al recuperar el foco, conservando el perfil y los borradores.
+  // Consulta la sesión y obtiene el nombre, sueldo y día de pago del usuario.
   const cargarDatosPerfil = useCallback(async () => {
+    // Evita consultar cuando esta pantalla no está abierta.
     if (!focusedRef.current) return;
+
     const solicitud = ++ultimaCarga.current;
+
+    // Muestra el indicador de carga únicamente hasta obtener el primer perfil.
     if (!perfilCargado.current) setCargando(true);
+
     try {
       const {
         data: { session },
         error: errorSesion,
       } = await supabase.auth.getSession();
+
+      // Interrumpe la carga si falla la consulta de la sesión.
       if (errorSesion) throw errorSesion;
+
+      // Exige una sesión válida para consultar el perfil.
       if (!session?.user) throw new Error("No hay una sesión activa.");
+
       const user = session.user;
       const { data: perfil, error } = await supabase
         .from("perfiles")
         .select("nombre, sueldo, dia_pago")
         .eq("id", user.id)
         .single();
+
+      // Envía el error al bloque catch si falla la consulta del perfil.
       if (error) throw error;
+
+      // Descarta la respuesta si se salió de la pantalla o existe otra consulta más reciente.
       if (!focusedRef.current || solicitud !== ultimaCarga.current) return;
+
+      // Utiliza los datos disponibles y aplica valores predeterminados si faltan.
       const nom =
         perfil?.nombre ||
         user.user_metadata?.nombre ||
@@ -74,42 +88,57 @@ export default function ScreenProfile({
         "Usuario";
       const sue = (perfil?.sueldo || 0).toString();
       const dia = (perfil?.dia_pago || 1).toString();
+
       setEmail(user.email || "");
       setNombre(nom);
       setSueldo(sue);
       setDiaPago(dia);
+
+      // Actualiza los campos de edición solo si el modal está cerrado.
+      // Así conserva lo que el usuario está escribiendo mientras lo tiene abierto.
       if (!modalVisibleRef.current) {
         setEditNombre(nom);
         setEditSueldo(sue);
         setEditDiaPago(dia);
       }
+
       perfilCargado.current = true;
     } catch (err: any) {
+      // Registra el error únicamente si la consulta sigue correspondiendo a esta pantalla.
       if (focusedRef.current && solicitud === ultimaCarga.current) {
         console.error("Error al cargar perfil:", err.message);
       }
     } finally {
+      // Finaliza el indicador de carga para la consulta vigente de la pantalla activa.
       if (focusedRef.current && solicitud === ultimaCarga.current)
         setCargando(false);
     }
   }, []);
 
+  // Carga el perfil al entrar e invalida las consultas pendientes al salir.
   useEffect(() => {
+    // No inicia la consulta si la pantalla está inactiva.
     if (!isFocused) return;
+
     cargarDatosPerfil();
+
     return () => {
       ultimaCarga.current += 1;
     };
   }, [isFocused, cargarDatosPerfil]);
 
-  // 2. Guardar modificaciones directamente en Supabase
+  // 2. Guardar modificaciones directamente en Supabase.
+  // Valida los campos y guarda el nombre, sueldo y día de pago del formulario.
   const handleGuardarCambios = async () => {
+    // Rechaza un nombre vacío o compuesto solamente por espacios.
     if (!editNombre.trim()) {
       Alert.alert("Atención", "El nombre no puede estar vacío.");
       return;
     }
 
     const sueldoNum = parseInt(editSueldo.replace(/[^0-9]/g, ""));
+
+    // Solicita un sueldo válido y mayor que cero.
     if (isNaN(sueldoNum) || sueldoNum <= 0) {
       Alert.alert("Atención", "Ingresa un monto de sueldo válido.");
       return;
@@ -117,21 +146,24 @@ export default function ScreenProfile({
 
     try {
       setGuardando(true);
+
       const {
         data: { user },
       } = await supabase.auth.getUser();
 
+      // Detiene el guardado cuando no existe un usuario autenticado.
       if (!user) {
         Alert.alert("Error", "No hay sesión activa.");
         return;
       }
 
-      // Actualizar metadatos en Auth
+      // Actualizar metadatos en Auth.
       await supabase.auth.updateUser({
         data: { nombre: editNombre.trim() },
       });
 
-      // Actualizar fila en la tabla perfiles
+      // Actualizar fila en la tabla perfiles.
+      // upsert también permite crear la fila si todavía no existe.
       const { error: errorPerfil } = await supabase.from("perfiles").upsert({
         id: user.id,
         nombre: editNombre.trim(),
@@ -140,6 +172,7 @@ export default function ScreenProfile({
         actualizado_en: new Date().toISOString(),
       });
 
+      // Informa el error y mantiene abierto el formulario si falla el guardado del perfil.
       if (errorPerfil) {
         Alert.alert("Error al actualizar", errorPerfil.message);
         return;
@@ -149,6 +182,8 @@ export default function ScreenProfile({
       ultimaCarga.current += 1;
       perfilCargado.current = true;
       setCargando(false);
+
+      // Actualiza los datos visibles y cierra el modal.
       setNombre(editNombre.trim());
       setSueldo(sueldoNum.toString());
       setDiaPago(editDiaPago);
@@ -158,10 +193,13 @@ export default function ScreenProfile({
     } catch (err: any) {
       Alert.alert("Error inesperado", err.message || "No se pudo actualizar.");
     } finally {
+      // Finaliza el estado de guardado tanto si la operación funciona como si falla.
       setGuardando(false);
     }
   };
 
+  // Solicita confirmación antes de cerrar la sesión.
+  // Al confirmar, cierra la sesión en Supabase y vuelve a la bienvenida.
   const handleCerrarSesion = async () => {
     Alert.alert("Cerrar Sesión", "¿Seguro que deseas salir de tu cuenta?", [
       { text: "Cancelar", style: "cancel" },
@@ -170,10 +208,13 @@ export default function ScreenProfile({
         style: "destructive",
         onPress: async () => {
           const { error } = await supabase.auth.signOut();
+
+          // Avisa y detiene la navegación si no se pudo cerrar la sesión.
           if (error) {
             Alert.alert("No se pudo cerrar sesión", error.message);
             return;
           }
+
           onNav(0);
         },
       },
@@ -186,10 +227,14 @@ export default function ScreenProfile({
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{ padding: 24, paddingBottom: 24 }}
       >
+        {/* Paso del tutorial correspondiente a la sección Perfil. */}
         <TutorialCard pantalla="Perfil" onNav={onNav} />
+
         {/* Cabecera */}
         <View className="flex-row justify-between items-center mb-[20px]">
           <Text className="text-[24px] font-bold text-text">Mi Perfil</Text>
+
+          {/* Copia los datos actuales al formulario y abre el modal de edición. */}
           <TouchableOpacity
             onPress={() => {
               setEditNombre(nombre);
@@ -213,6 +258,7 @@ export default function ScreenProfile({
             <Feather name="user" size={36} color="#fff" />
           </View>
 
+          {/* Muestra la carga inicial o los datos personales disponibles. */}
           {cargando ? (
             <ActivityIndicator color="#512DA8" />
           ) : (
@@ -234,6 +280,7 @@ export default function ScreenProfile({
             INFORMACIÓN FINANCIERA
           </Text>
 
+          {/* Sueldo configurado, presentado con formato numérico de Chile. */}
           <View className="flex-row justify-between items-center py-[10px] border-b-[1px] border-bg">
             <View className="flex-row items-center gap-[10px]">
               <Feather name="dollar-sign" size={18} color="#512DA8" />
@@ -246,6 +293,7 @@ export default function ScreenProfile({
             </Text>
           </View>
 
+          {/* Día de pago guardado en el perfil. */}
           <View className="flex-row justify-between items-center py-[10px]">
             <View className="flex-row items-center gap-[10px]">
               <Feather name="calendar" size={18} color="#512DA8" />
@@ -259,7 +307,9 @@ export default function ScreenProfile({
           </View>
         </View>
 
+        {/* Accesos al tutorial, los gastos fijos y las notificaciones. */}
         <View className="bg-card rounded-[16px] mb-[24px]">
+          {/* Reinicia el tutorial y abre Inicio para comenzar el recorrido. */}
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Repetir tutorial de FinZen"
@@ -276,6 +326,8 @@ export default function ScreenProfile({
             </Text>
             <Feather name="chevron-right" size={20} color="#6B6580" />
           </Pressable>
+
+          {/* Abre la pantalla de gastos fijos. */}
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Abrir gastos fijos"
@@ -289,6 +341,8 @@ export default function ScreenProfile({
             </Text>
             <Feather name="chevron-right" size={20} color="#6B6580" />
           </Pressable>
+
+          {/* Abre la pantalla de notificaciones. */}
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Abrir notificaciones"
@@ -317,12 +371,14 @@ export default function ScreenProfile({
       </ScrollView>
 
       {/* Modal para Editar Datos */}
+      {/* Se muestra únicamente cuando está abierto y Perfil es la pantalla activa. */}
       <Modal
         visible={modalVisible && isFocused}
         animationType="slide"
         transparent
         onRequestClose={() => setModalVisible(false)}
       >
+        {/* Ajusta el espacio del formulario al aparecer el teclado. */}
         <KeyboardAvoidingView
           behavior={Platform.OS === "ios" ? "padding" : "height"}
           className="flex-1 justify-end"
@@ -331,7 +387,8 @@ export default function ScreenProfile({
           <View
             className="bg-card rounded-tl-[24px] rounded-tr-[24px] p-[24px] max-h-[85%]"
             style={layout.modal}
-          >            <View className="flex-row justify-between items-center mb-[20px]">
+          >
+            <View className="flex-row justify-between items-center mb-[20px]">
               <Text className="text-[18px] font-bold text-text">
                 Editar Perfil
               </Text>
@@ -371,7 +428,9 @@ export default function ScreenProfile({
               </Text>
               <View className="flex-row flex-wrap gap-[8px] mb-[24px]">
                 {dias.map((d) => {
+                  // Identifica el día seleccionado para destacarlo visualmente.
                   const sel = parseInt(editDiaPago) === d;
+
                   return (
                     <TouchableOpacity
                       key={d}
@@ -391,6 +450,7 @@ export default function ScreenProfile({
               </View>
 
               {/* Botón Guardar Cambios */}
+              {/* Se desactiva y muestra un indicador durante el guardado. */}
               <TouchableOpacity
                 onPress={handleGuardarCambios}
                 disabled={guardando}
