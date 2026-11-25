@@ -13,8 +13,8 @@ import ScreenProfile from "../screens/ScreenProfile";
 import ScreenQuickExpense from "../screens/ScreenQuickExpense";
 import ScreenRecurring from "../screens/ScreenRecurring";
 import ScreenSavingsGoals from "../screens/ScreenSavingsGoals";
-import { rutasAnteriores, type RutasFinzen } from "./rutas";
 import { TutorialProvider } from "../tutorial/TutorialProvider";
+import { rutasAnteriores, type RutasFinzen } from "./rutas";
 
 const Tabs = createBottomTabNavigator<RutasFinzen>();
 const SalirContext = createContext<() => void>(() => {});

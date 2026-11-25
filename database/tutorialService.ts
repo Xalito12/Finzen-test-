@@ -1,32 +1,41 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { supabase } from "./supabase";
 import { indiceSeguroTutorial, pasosTutorial } from "../tutorial/pasos";
+import { supabase } from "./supabase";
 
+// Versión del tutorial utilizada para identificar el progreso guardado.
 export const VERSION_TUTORIAL = 1;
+// Define los datos que representan el avance del usuario en el tutorial.
 export interface ProgresoTutorial {
   version: number;
   paso: number;
   completado: boolean;
   repeticion: boolean;
 }
+// Define el estado necesario para iniciar o retomar el tutorial.
 export interface EstadoInicialTutorial {
   activo: boolean;
   progreso: ProgresoTutorial;
   sincronizarFinal: boolean;
   mensaje: string;
 }
+// Genera una clave de almacenamiento distinta para cada usuario y versión.
 export function claveTutorial(usuarioId: string): string {
   return `finzen:tutorial:v${VERSION_TUTORIAL}:${usuarioId}`;
 }
+// Crea el progreso inicial en el primer paso y permite indicar si es una repetición.
 export function progresoInicialTutorial(repeticion = false): ProgresoTutorial {
   return { version: VERSION_TUTORIAL, paso: 0, completado: false, repeticion };
 }
+// Convierte el texto guardado en un progreso válido.
+// Devuelve null cuando los datos están ausentes, dañados o son incompatibles.
 export function interpretarProgresoTutorial(
   valor: string | null,
 ): ProgresoTutorial | null {
+  // Si no hay información guardada, devuelve null.
   if (!valor) return null;
   try {
     const dato = JSON.parse(valor) as Partial<ProgresoTutorial>;
+    // Rechaza el progreso si la versión no coincide o sus campos son inválidos.
     if (
       dato.version !== VERSION_TUTORIAL ||
       typeof dato.completado !== "boolean" ||
@@ -44,6 +53,8 @@ export function interpretarProgresoTutorial(
     return null;
   }
 }
+// Combina el avance local con la información del tutorial presente en la sesión.
+// Decide si la guía debe mostrarse y si su final necesita sincronizarse.
 export async function cargarEstadoTutorial(
   usuarioId: string,
 ): Promise<EstadoInicialTutorial> {
@@ -54,14 +65,15 @@ export async function cargarEstadoTutorial(
       await AsyncStorage.getItem(claveTutorial(usuarioId)),
     );
   } catch {
-    mensaje =
-      "La guía funciona, pero no se pudo recuperar su avance en este dispositivo.";
+    mensaje ="La guía funciona, pero no se pudo recuperar su avance en este dispositivo.";
   }
   const {
     data: { session },
     error,
   } = await supabase.auth.getSession();
+  // Propaga el error si falla la consulta de la sesión.
   if (error) throw error;
+  // Impide continuar si falta la sesión o pertenece a otro usuario.
   if (!session?.user || session.user.id !== usuarioId)
     throw new Error(
       "La sesión cambió. Vuelve a entrar para continuar la guía.",
@@ -73,6 +85,7 @@ export async function cargarEstadoTutorial(
   // Una repetición voluntaria se retoma incluso si la cuenta ya completó el recorrido.
   if (local?.repeticion && !local.completado)
     return { activo: true, progreso: local, sincronizarFinal: false, mensaje };
+  // Si la cuenta ya completó esta versión del tutorial, devuelve la guía inactiva.
   if (terminadoRemoto)
     return {
       activo: false,
@@ -80,6 +93,7 @@ export async function cargarEstadoTutorial(
       sincronizarFinal: false,
       mensaje,
     };
+  // Si terminó localmente, desactiva la guía e indica si falta sincronizar el final.
   if (local?.completado)
     return {
       activo: false,
@@ -87,8 +101,10 @@ export async function cargarEstadoTutorial(
       sincronizarFinal: pendiente,
       mensaje,
     };
+  // Si hay un avance local sin completar, permite continuar desde ese progreso.
   if (local)
     return { activo: true, progreso: local, sincronizarFinal: false, mensaje };
+  // Cuando no hay avance local, utiliza el estado inicial y la marca de pendiente.
   return {
     activo: pendiente,
     progreso: progresoInicialTutorial(),
@@ -96,6 +112,8 @@ export async function cargarEstadoTutorial(
     mensaje,
   };
 }
+// Guarda el progreso en el dispositivo utilizando la clave del usuario.
+// Asegura que se almacenen la versión actual y un índice de paso válido.
 export async function guardarProgresoTutorial(
   usuarioId: string,
   progreso: ProgresoTutorial,
@@ -109,6 +127,8 @@ export async function guardarProgresoTutorial(
     }),
   );
 }
+// Marca el tutorial como completado en los metadatos de la cuenta de Supabase.
+// Antes de actualizar, comprueba que la sesión corresponda al usuario indicado.
 export async function sincronizarTutorialCompletado(
   usuarioId: string,
 ): Promise<void> {
@@ -116,7 +136,9 @@ export async function sincronizarTutorialCompletado(
     data: { session },
     error: errorSesion,
   } = await supabase.auth.getSession();
+  // Propaga el error si no se pudo obtener la sesión.
   if (errorSesion) throw errorSesion;
+  // Detiene la actualización si falta la sesión o cambió el usuario.
   if (!session?.user || session.user.id !== usuarioId)
     throw new Error("La sesión cambió antes de guardar el tutorial.");
   const { error } = await supabase.auth.updateUser({
@@ -125,8 +147,10 @@ export async function sincronizarTutorialCompletado(
       finzen_tutorial_version: VERSION_TUTORIAL,
     },
   });
+  // Propaga cualquier error al guardar los cambios en la cuenta.
   if (error) throw error;
 }
+// Genera el progreso final con el último paso y el tutorial marcado como completado.
 export function progresoCompletadoTutorial(): ProgresoTutorial {
   return {
     version: VERSION_TUTORIAL,
