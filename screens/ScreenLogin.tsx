@@ -1,12 +1,24 @@
 import { Feather } from "@expo/vector-icons";
 import React, { useState } from "react";
-import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, TouchableOpacity, View, } from "react-native";
+import {
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import { supabase } from "../database/supabase";
 
 export default function ScreenLogin({ onNav }: { onNav: (i: number) => void }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [cargando, setCargando] = useState(false);
+  // Estado para evitar múltiples envíos al solicitar el correo de recuperación.
+  const [recuperando, setRecuperando] = useState(false);
   const [verPassword, setVerPassword] = useState(false);
 
   const handleLogin = async () => {
@@ -40,6 +52,49 @@ export default function ScreenLogin({ onNav }: { onNav: (i: number) => void }) {
       Alert.alert("Error inesperado", err.message || "Ocurrió un error.");
     } finally {
       setCargando(false);
+    }
+  };
+
+  // Envía un correo de recuperación de contraseña usando Supabase Auth.
+  const handleRecuperarPassword = async () => {
+    const correoLimpio = email.trim();
+
+    // Verifica que el usuario haya escrito su correo antes de enviar la solicitud.
+    if (!correoLimpio) {
+      Alert.alert(
+        "Ingresa tu correo",
+        "Escribe tu correo electrónico arriba y luego toca «¿Olvidaste tu contraseña?».",
+      );
+      return;
+    }
+
+    // Validación básica de formato de correo electrónico.
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correoLimpio)) {
+      Alert.alert("Correo inválido", "Ingresa un correo electrónico válido.");
+      return;
+    }
+
+    try {
+      setRecuperando(true);
+      // Solicita a Supabase el envío del enlace para restablecer la contraseña.
+      const { error } = await supabase.auth.resetPasswordForEmail(correoLimpio);
+
+      if (error) {
+        Alert.alert("No se pudo enviar el correo", error.message);
+        return;
+      }
+
+      Alert.alert(
+        "Correo enviado",
+        `Enviamos instrucciones para restablecer tu contraseña a ${correoLimpio}. Revisa también tu carpeta de spam.`,
+      );
+    } catch (err: any) {
+      Alert.alert(
+        "Error inesperado",
+        err.message || "No se pudo solicitar la recuperación de contraseña.",
+      );
+    } finally {
+      setRecuperando(false);
     }
   };
 
@@ -92,7 +147,7 @@ export default function ScreenLogin({ onNav }: { onNav: (i: number) => void }) {
           <Text className="text-[12px] font-semibold text-text-secondary mb-[6px]">
             CONTRASEÑA
           </Text>
-          <View className="flex-row items-center bg-bg rounded-[12px] px-[12px] mb-[24px]">
+          <View className="flex-row items-center bg-bg rounded-[12px] px-[12px] mb-[10px]">
             <Feather name="lock" size={18} color="#8A849C" />
             <TextInput
               placeholder="Tu contraseña"
@@ -111,10 +166,23 @@ export default function ScreenLogin({ onNav }: { onNav: (i: number) => void }) {
             </TouchableOpacity>
           </View>
 
+          {/* Botón para recuperar la contraseña */}
+          <TouchableOpacity
+            onPress={handleRecuperarPassword}
+            disabled={cargando || recuperando}
+            className="self-end mb-[20px] py-[4px]"
+          >
+            <Text className="text-primary text-[13px] font-semibold">
+              {recuperando
+                ? "Enviando correo..."
+                : "¿Olvidaste tu contraseña?"}
+            </Text>
+          </TouchableOpacity>
+
           {/* Botón de Ingreso */}
           <TouchableOpacity
             onPress={handleLogin}
-            disabled={cargando}
+            disabled={cargando || recuperando}
             className="bg-primary py-[14px] rounded-[12px] items-center justify-center"
           >
             {cargando ? (

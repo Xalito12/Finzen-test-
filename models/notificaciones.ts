@@ -1,5 +1,7 @@
-import { resumirGastos, type CategoriaResumen, type GastoResumen, } from "../database/consultasFinanzas";
+import { resumirGastos, sumarIngresosExtra, type CategoriaResumen, type GastoResumen, type IngresoExtraResumen, } from "../database/consultasFinanzas";
 import type { MetaAhorro } from "../database/metasService";
+
+
 
 // Define los niveles de importancia de las notificaciones.
 export type NivelNotificacion = "critica" | "aviso" | "logro";
@@ -17,6 +19,7 @@ export interface DatosNotificaciones {
   perfil: { sueldo?: unknown } | null;
   gastos: ReadonlyArray<Pick<GastoResumen, "monto" | "categoria">>;
   categorias: ReadonlyArray<CategoriaResumen>;
+  ingresosExtra?: ReadonlyArray<Pick<IngresoExtraResumen, "monto">>;
 }
 
 // Establece el orden de prioridad de las notificaciones.
@@ -72,14 +75,22 @@ export function generarNotificaciones(
   // Si hay datos financieros, revisa el presupuesto y las categorías.
   if (datos) {
     const resumen = resumirGastos(datos.gastos);
-    const sueldo = Number(datos.perfil?.sueldo);
+    const sueldoBase = Number(datos.perfil?.sueldo) || 0;
+    // Suma los ingresos extra del ciclo actual al presupuesto disponible.
+    const totalIngresosExtra = sumarIngresosExtra(datos.ingresosExtra || []);
+    const sueldo = sueldoBase + totalIngresosExtra;
     // Evalúa el presupuesto cuando el sueldo es positivo y los montos son válidos.
+    // Suma lo ahorrado en metas para que el saldo coincida con la tarjeta de Inicio.
+    const ahorroEnMetas = metas.reduce(
+      (total, meta) => total + Math.max(0, Number(meta.monto_ahorrado) || 0),
+      0,
+    );
     if (
       Number.isFinite(sueldo) &&
       sueldo > 0 &&
       Number.isFinite(resumen.total)
     ) {
-      const saldo = sueldo - Math.max(0, resumen.total);
+      const saldo = sueldo - (Math.max(0, resumen.total) + ahorroEnMetas);
       const restante = (saldo / sueldo) * 100;
       // Si los gastos superan el sueldo, agrega una alerta crítica.
       if (saldo < 0)

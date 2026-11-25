@@ -7,13 +7,18 @@ import { ActivityIndicator, Alert, FlatList, KeyboardAvoidingView, Modal, Platfo
 import { layout } from "../components/layout";
 import MiniBadge from "../components/MiniBadge";
 import ProgressBar from "../components/ProgressBar";
-import { consultarInicio, resumirGastos, type GastoResumen, } from "../database/consultasFinanzas";
+import { consultarInicio, resumirGastos, sumarIngresosExtra, type GastoResumen, } from "../database/consultasFinanzas";
 import { listarMetas } from "../database/metasService";
 import { supabase } from "../database/supabase";
 import { calcularEstadoPresupuesto } from "../models/estadoPresupuesto";
 import { generarNotificaciones } from "../models/notificaciones";
 import TutorialCard from "../tutorial/TutorialCard";
 import { confirmarEliminacion } from "../utils/confirmarEliminacion";
+// Importa el gráfico interactivo de gastos por ciclo mensual.
+
+// Importa funciones para validar la fecha editada y obtener la fecha de hoy.
+import GraficoGastosMes from "@/components/GraficoGastosMes";
+import { esFechaISOValida, fechaHoyISO } from "../utils/cicloFinanciero";
 interface CategoriaInicio {
   id: number | string;
   name: string;
@@ -39,6 +44,12 @@ const FilaGasto = memo(function FilaGasto({
         <Text className="font-bold text-text text-[16px]">
           {gasto.categoria}
         </Text>
+        {/* Muestra la fecha del gasto si existe en el registro */}
+        {gasto.fecha ? (
+          <Text className="text-[12px] text-text-secondary">
+            {gasto.fecha}
+          </Text>
+        ) : null}
       </View>
       <Text className="text-[16px] font-bold text-error mr-[8px]">
         ${Number(gasto.monto).toLocaleString("es-CL")}
@@ -95,6 +106,23 @@ export default function ScreenDashboard({
   const [idEditar, setIdEditar] = useState<GastoResumen["id"] | null>(null);
   const [montoEditar, setMontoEditar] = useState("");
 
+  // Guarda el texto del rango de fechas del ciclo actual (ej: "5 nov - 4 dic").
+  const [etiquetaCiclo, setEtiquetaCiclo] = useState("");
+  // Controla qué ciclo financiero se está viendo (0 = actual, -1 = mes anterior, etc.).
+  const [desplazamientoCiclo, setDesplazamientoCiclo] = useState(0);
+
+  // Guarda la fecha en formato AAAA-MM-DD mientras se edita un gasto.
+  const [fechaEditar, setFechaEditar] = useState("");
+  // Guarda el total de ingresos extra registrados en el ciclo actual.
+  const [totalIngresosExtra, setTotalIngresosExtra] = useState(0);
+  // Controla si el modal para agregar un ingreso extra está visible.
+  const [modalIngresoVisible, setModalIngresoVisible] = useState(false);
+  // Campos del formulario de nuevo ingreso extra.
+  const [descripcionIngreso, setDescripcionIngreso] = useState("");
+  const [montoIngreso, setMontoIngreso] = useState("");
+  // Evita doble envío mientras se guarda el ingreso extra en Supabase.
+  const [guardandoIngreso, setGuardandoIngreso] = useState(false);
+
   const listaRef = useRef<FlatList<GastoResumen>>(null);
   const posicionGastos = useRef(0);
   const ultimaCarga = useRef(0);
@@ -114,7 +142,10 @@ export default function ScreenDashboard({
   const cargarInicio = useCallback(async () => {
     const solicitud = ++ultimaCarga.current;
     try {
-      const [datos, metas] = await Promise.all([consultarInicio(), listarMetas()]);
+      const [datos, metas] = await Promise.all([
+        consultarInicio(desplazamientoCiclo),
+        listarMetas(),
+      ]);
       const { user, perfil, gastos, categorias } = datos;
       // Descarta respuestas de una pantalla anterior o de una consulta superada.
       if (solicitud !== ultimaCarga.current) return;
@@ -131,9 +162,13 @@ export default function ScreenDashboard({
         "Usuario",
       );
       setSueldoTotal(Number(perfil?.sueldo) || 0);
+      // Actualiza la etiqueta del ciclo financiero calculado desde dia_pago.
+      setEtiquetaCiclo(datos.ciclo.etiqueta);
       setListaGastos(gastos);
       setTotalGastado(resumen.total);
       setTotalAhorrado(ahorroEnMetas);
+      // Calcula y guarda el total de ingresos extra del ciclo actual.
+      setTotalIngresosExtra(sumarIngresosExtra(datos.ingresosExtra || []));
       setCategoriasDinamicas(
         categorias.map((cat) => ({
           id: cat.id,
@@ -157,7 +192,8 @@ export default function ScreenDashboard({
         setRefrescando(false);
       }
     }
-  }, []);
+// Vuelve a generar la consulta cuando cambia el ciclo seleccionado.
+  }, [desplazamientoCiclo]);
 
   useEffect(() => {
     if (!active) {
@@ -259,15 +295,27 @@ export default function ScreenDashboard({
   const prepararEdicion = useCallback((gasto: GastoResumen) => {
     setIdEditar(gasto.id);
     setMontoEditar(gasto.monto.toString());
+    // Carga la fecha del gasto o usa la fecha de hoy si el registro no tenía una.
+    setFechaEditar(gasto.fecha || fechaHoyISO());
   }, []);
 
-  // 5. Editar monto de un gasto en Supabase
+  // 5. Editar monto y fecha de un gasto en Supabase
   const guardarEdicionGasto = async () => {
     if (idEditar === null || guardandoGasto) return;
     const montoNum = parseInt(montoEditar.replace(/[^0-9]/g, ""));
+    const fechaLimpia = fechaEditar.trim();
 
     if (isNaN(montoNum) || montoNum <= 0) {
       Alert.alert("Atención", "Ingresa un monto válido.");
+      return;
+    }
+
+    // Comprueba que la fecha tenga el formato correcto AAAA-MM-DD y sea una fecha real.
+    if (!esFechaISOValida(fechaLimpia)) {
+      Alert.alert(
+        "Fecha inválida",
+        "Usa el formato AAAA-MM-DD (por ejemplo, 2026-11-25).",
+      );
       return;
     }
 
@@ -275,7 +323,8 @@ export default function ScreenDashboard({
     try {
       const { error } = await supabase
         .from("gastos")
-        .update({ monto: montoNum })
+        // Actualiza tanto el monto como la fecha del gasto en Supabase.
+        .update({ monto: montoNum, fecha: fechaLimpia })
         .eq("id", idEditar);
 
       if (error) {
@@ -285,6 +334,7 @@ export default function ScreenDashboard({
 
       setIdEditar(null);
       setMontoEditar("");
+      setFechaEditar("");
       cargarInicio();
     } catch (err: any) {
       Alert.alert("Error", err.message);
@@ -293,12 +343,66 @@ export default function ScreenDashboard({
     }
   };
 
+  // Guarda un nuevo ingreso extra en Supabase dentro del ciclo actual.
+  const guardarIngresoExtra = async () => {
+    if (guardandoIngreso) return;
+
+    const descLimpia = descripcionIngreso.trim();
+    const montoNum = parseInt(montoIngreso.replace(/[^0-9]/g, ""), 10);
+
+    if (!descLimpia) {
+      Alert.alert("Atención", "Ingresa una descripción (ej. Bono, Venta).");
+      return;
+    }
+    if (isNaN(montoNum) || montoNum <= 0) {
+      Alert.alert("Atención", "Ingresa un monto válido mayor a cero.");
+      return;
+    }
+
+    setGuardandoIngreso(true);
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) {
+        Alert.alert("Error", "No hay sesión activa.");
+        return;
+      }
+
+      const { error } = await supabase.from("ingresos_extra").insert({
+        usuario_id: user.id,
+        descripcion: descLimpia,
+        monto: montoNum,
+        // Usa la fecha de hoy para ubicar el ingreso en el ciclo actual.
+        fecha: fechaHoyISO(),
+      });
+
+      if (error) {
+        Alert.alert("Error al guardar", error.message);
+        return;
+      }
+
+      // Limpia el formulario, cierra el modal y recarga el resumen de Inicio.
+      setDescripcionIngreso("");
+      setMontoIngreso("");
+      setModalIngresoVisible(false);
+      cargarInicio();
+    } catch (err: any) {
+      Alert.alert("Error", err.message || "No se pudo guardar el ingreso.");
+    } finally {
+      setGuardandoIngreso(false);
+    }
+  };
+
+ // Presupuesto total del ciclo: sueldo base más ingresos extra.
+  const presupuestoTotal = sueldoTotal + totalIngresosExtra;
   const totalDescontado = totalGastado + totalAhorrado;
   const estadoPresupuesto = calcularEstadoPresupuesto(
-    sueldoTotal,
+    presupuestoTotal,
     totalDescontado,
   );
-  const saldoDisponible = sueldoTotal - totalDescontado;
+  // Calcula el saldo disponible usando el presupuesto total (sueldo + ingresos extra).
+  const saldoDisponible = presupuestoTotal - totalDescontado;
 
   if (!perfilCargado) {
     return (
@@ -417,7 +521,7 @@ export default function ScreenDashboard({
                     className="text-[11px]"
                     style={{ color: "rgba(255,255,255,0.7)" }}
                   >
-                    Disponible · CLP
+                    Disponible · CLP {etiquetaCiclo ? `(${etiquetaCiclo})` : ""}
                   </Text>
                   <Text
                     className="text-[24px] font-bold"
@@ -470,6 +574,27 @@ export default function ScreenDashboard({
                       ${totalAhorrado.toLocaleString("es-CL")}
                     </Text>
                   </View>
+                  {/* Muestra el total de ingresos extra del ciclo y permite agregar uno nuevo */}
+                  <View className="flex-row items-center justify-between mt-[10px]">
+                    <Text
+                      className="text-[11px]"
+                      style={{ color: "rgba(255,255,255,0.85)" }}
+                    >
+                      Ingresos extra: +${totalIngresosExtra.toLocaleString("es-CL")}
+                    </Text>
+                    <TouchableOpacity
+                      onPress={() => setModalIngresoVisible(true)}
+                      className="px-[10px] py-[4px] rounded-[8px]"
+                      style={{ backgroundColor: "rgba(255,255,255,0.2)" }}
+                    >
+                      <Text
+                        className="text-[11px] font-bold"
+                        style={{ color: "white" }}
+                      >
+                        + Ingreso extra
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
                 <MiniBadge
                   percent={estadoPresupuesto.porcentajeDisponible}
@@ -519,6 +644,19 @@ export default function ScreenDashboard({
                 </TouchableOpacity>
               </View>
             )}
+
+            {/* Gráfico interactivo de gastos del ciclo seleccionado */}
+            <GraficoGastosMes
+              categorias={categoriasDinamicas}
+              totalGastado={totalGastado}
+              etiquetaCiclo={etiquetaCiclo}
+              desplazamiento={desplazamientoCiclo}
+              onAnterior={() => setDesplazamientoCiclo((d) => d - 1)}
+              onSiguiente={() =>
+                setDesplazamientoCiclo((d) => Math.min(0, d + 1))
+              }
+              onVolverActual={() => setDesplazamientoCiclo(0)}
+            />
 
             {/* Sección de Categorías */}
             <View className="flex-row justify-between mb-[12px]">
@@ -620,7 +758,7 @@ export default function ScreenDashboard({
               style={layout.modal}
             >              <View className="flex-row justify-between items-center mb-[12px]">
                 <Text className="text-[16px] font-bold text-text">
-                  Editar monto del gasto
+                  Editar gasto
                 </Text>
                 <Pressable
                   disabled={guardandoGasto}
@@ -645,6 +783,19 @@ export default function ScreenDashboard({
                 accessibilityLabel="Nuevo monto del gasto"
                 className="bg-bg rounded-[10px] px-[12px] h-[44px] mb-[16px] text-[15px] text-text"
               />
+              {/* Campo para editar la fecha del gasto */}
+              <Text className="text-[12px] font-semibold text-text-secondary mb-[4px]">
+                Fecha (AAAA-MM-DD)
+              </Text>
+              <TextInput
+                value={fechaEditar}
+                onChangeText={setFechaEditar}
+                placeholder="2026-11-25"
+                placeholderTextColor="#8A849C"
+                editable={!guardandoGasto}
+                accessibilityLabel="Fecha del gasto"
+                className="bg-bg rounded-[10px] px-[12px] h-[44px] mb-[16px] text-[15px] text-text"
+              />
               <Pressable
                 disabled={guardandoGasto}
                 onPress={guardarEdicionGasto}
@@ -658,6 +809,89 @@ export default function ScreenDashboard({
                 ) : (
                   <Text className="text-card font-semibold text-[14px]">
                     Guardar cambios
+                  </Text>
+                )}
+              </Pressable>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+      {/* Modal para registrar un ingreso extra en el ciclo actual */}
+      <Modal
+        visible={modalIngresoVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          if (!guardandoIngreso) setModalIngresoVisible(false);
+        }}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={{ flex: 1 }}
+        >
+          <View
+            className="flex-1 justify-center p-[20px]"
+            style={{ backgroundColor: "rgba(0,0,0,0.4)" }}
+          >
+            <View
+              className="bg-card rounded-[14px] p-[20px]"
+              style={layout.modal}
+            >
+              <View className="flex-row justify-between items-center mb-[12px]">
+                <Text className="text-[16px] font-bold text-text">
+                  Registrar ingreso extra
+                </Text>
+                <Pressable
+                  disabled={guardandoIngreso}
+                  onPress={() => setModalIngresoVisible(false)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Cerrar registro de ingreso extra"
+                  hitSlop={8}
+                  className="p-[8px]"
+                >
+                  <Feather name="x" size={20} color="#8A849C" />
+                </Pressable>
+              </View>
+
+              <Text className="text-[12px] font-semibold text-text-secondary mb-[4px]">
+                Descripción
+              </Text>
+              <TextInput
+                autoFocus
+                value={descripcionIngreso}
+                onChangeText={setDescripcionIngreso}
+                placeholder="Ej. Bono, Venta, Trabajo aparte"
+                placeholderTextColor="#8A849C"
+                editable={!guardandoIngreso}
+                className="bg-bg rounded-[10px] px-[12px] h-[44px] mb-[12px] text-[15px] text-text"
+              />
+
+              <Text className="text-[12px] font-semibold text-text-secondary mb-[4px]">
+                Monto ($)
+              </Text>
+              <TextInput
+                value={montoIngreso}
+                onChangeText={setMontoIngreso}
+                placeholder="50000"
+                placeholderTextColor="#8A849C"
+                keyboardType="numeric"
+                editable={!guardandoIngreso}
+                className="bg-bg rounded-[10px] px-[12px] h-[44px] mb-[16px] text-[15px] text-text"
+              />
+
+              <Pressable
+                disabled={guardandoIngreso}
+                onPress={guardarIngresoExtra}
+                className="bg-primary h-[44px] rounded-[10px] items-center justify-center"
+              >
+                {guardandoIngreso ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text
+                    className="font-bold text-[15px]"
+                    style={{ color: "white" }}
+                  >
+                    Guardar ingreso
                   </Text>
                 )}
               </Pressable>

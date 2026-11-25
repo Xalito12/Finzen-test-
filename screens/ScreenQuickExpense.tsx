@@ -1,9 +1,10 @@
 // screens/ScreenQuickExpense.tsx
 import { Feather } from "@expo/vector-icons";
 import { useIsFocused } from "@react-navigation/native";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import TutorialCard from "../tutorial/TutorialCard";
 import { useTutorial } from "../tutorial/TutorialProvider";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+// Importa la función para obtener la fecha de hoy en formato AAAA-MM-DD.
 import {
   ActivityIndicator,
   Alert,
@@ -14,6 +15,7 @@ import {
   View,
 } from "react-native";
 import { supabase } from "../database/supabase";
+import { fechaHoyISO } from "../utils/cicloFinanciero";
 
 export default function ScreenQuickExpense({
   onNav,
@@ -162,6 +164,8 @@ export default function ScreenQuickExpense({
         monto: montoNumerico,
         categoria: categoriaElegida,
         icono: iconoElegido,
+        // Guarda la fecha local actual para ubicar el gasto en el ciclo financiero.
+        fecha: fechaHoyISO(),
       });
 
       if (error) {
