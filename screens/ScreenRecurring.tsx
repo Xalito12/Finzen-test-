@@ -25,6 +25,8 @@ interface GastoFijo {
   categoria: string | null;
 }
 
+// Muestra una lista de gastos fijos de ejemplo con su monto y día de pago.
+// Recibe onNav, aunque esta pantalla no lo utiliza.
 export default function ScreenRecurring({
   onNav,
 }: {

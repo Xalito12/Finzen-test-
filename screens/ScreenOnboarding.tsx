@@ -3,6 +3,8 @@ import { LinearGradient } from "expo-linear-gradient";
 import React from "react";
 import { Alert, Text, TouchableOpacity, View } from "react-native";
 
+// Pantalla de bienvenida que presenta FinZen.
+// Recibe las acciones para abrir el registro o el inicio de sesión.
 export default function ScreenOnboarding({
   onRegister,
   onLogin,
@@ -10,6 +12,7 @@ export default function ScreenOnboarding({
   onRegister: () => void;
   onLogin: () => void;
 }) {
+  // Muestra un aviso porque el acceso con Google todavía no está implementado.
   const handleGoogleLogin = () => {
     Alert.alert(
       "Inicio con Google",
@@ -35,6 +38,7 @@ export default function ScreenOnboarding({
 
       {/* Ilustración y Textos centrales */}
       <View className="items-center">
+        {/* Indicador decorativo: el 68 % es un ejemplo, no un dato del usuario. */}
         <View className="w-[170px] h-[170px] rounded-[85px] border-[10px] border-accent items-center justify-center mb-[28px]">
           <Text className="text-card text-[32px] font-bold">68%</Text>
           <Text
@@ -58,7 +62,7 @@ export default function ScreenOnboarding({
 
       {/* Botones inferiores */}
       <View className="gap-[12px] mb-[20px]">
-        {/* Botón Crear Cuenta */}
+        {/* Botón Crear Cuenta: ejecuta la acción de registro recibida. */}
         <TouchableOpacity
           onPress={onRegister}
           className="h-[50px] rounded-[14px] bg-accent items-center justify-center"
@@ -68,7 +72,7 @@ export default function ScreenOnboarding({
           </Text>
         </TouchableOpacity>
 
-        {/* Enlace Iniciar Sesión */}
+        {/* Enlace Iniciar Sesión: ejecuta la acción de acceso recibida. */}
         <TouchableOpacity
           onPress={onLogin}
           className="py-[8px] items-center justify-center"
@@ -82,7 +86,7 @@ export default function ScreenOnboarding({
           </Text>
         </TouchableOpacity>
 
-        {/* Botón Continuar con Google */}
+        {/* Botón Continuar con Google: muestra el aviso de próxima disponibilidad. */}
         <TouchableOpacity
           onPress={handleGoogleLogin}
           className="h-[50px] rounded-[14px] border-[1px] items-center justify-center"

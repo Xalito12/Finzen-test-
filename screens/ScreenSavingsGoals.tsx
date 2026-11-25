@@ -1,41 +1,18 @@
 import { Feather } from "@expo/vector-icons";
 import { useIsFocused } from "@react-navigation/native";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import {
-  ActivityIndicator,
-  Alert,
-  FlatList,
-  Keyboard,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  Pressable,
-  ScrollView,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { ActivityIndicator, Alert, FlatList, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, Text, TextInput, View, } from "react-native";
 import { layout } from "../components/layout";
 import ProgressBar from "../components/ProgressBar";
-import {
-  actualizarMeta,
-  crearMeta,
-  eliminarMeta,
-  listarMetas,
-  mensajeErrorMetas,
-  registrarAporte,
-  type MetaAhorro,
-} from "../database/metasService";
-import {
-  diasHastaFecha,
-  fechaLocalValida,
-  leerMontoMeta,
-  porcentajeMeta,
-} from "../models/metas";
+import { actualizarMeta, crearMeta, eliminarMeta, listarMetas, mensajeErrorMetas, registrarAporte, type MetaAhorro, } from "../database/metasService";
+import { diasHastaFecha, fechaLocalValida, leerMontoMeta, porcentajeMeta, } from "../models/metas";
 import TutorialCard from "../tutorial/TutorialCard";
 import { confirmarEliminacion } from "../utils/confirmarEliminacion";
+
+// Presenta los montos con el símbolo de dinero y el formato numérico de Chile.
 const dinero = (monto: number) => `$${monto.toLocaleString("es-CL")}`;
 
+// Nombres utilizados en el encabezado del calendario.
 const mesesCalendario = [
   "Enero",
   "Febrero",
@@ -51,12 +28,16 @@ const mesesCalendario = [
   "Diciembre",
 ];
 
+// Orden de los días del calendario, comenzando por el lunes.
 const diasSemana = ["Lu", "Ma", "Mi", "Ju", "Vi", "Sá", "Do"];
 
+// Cambia una fecha AAAA-MM-DD al formato DD/MM/AAAA para mostrarla.
 function formatearFecha(fecha: string) {
   return fecha.split("-").reverse().join("/");
 }
 
+// Construye una fecha local al mediodía.
+// El mes se indica desde 0 para enero hasta 11 para diciembre.
 function fechaCalendario(anio: number, mes: number, dia: number) {
   const fecha = new Date(0);
   fecha.setHours(12, 0, 0, 0);
@@ -64,6 +45,7 @@ function fechaCalendario(anio: number, mes: number, dia: number) {
   return fecha;
 }
 
+// Construye una fecha AAAA-MM-DD, completando sus partes con ceros.
 function claveFecha(anio: number, mes: number, dia: number) {
   return [
     String(anio).padStart(4, "0"),
@@ -72,6 +54,8 @@ function claveFecha(anio: number, mes: number, dia: number) {
   ].join("-");
 }
 
+// Botón reutilizable con apariencia principal o secundaria.
+// Permite desactivar la interacción mientras se realiza una operación.
 function Boton({
   texto,
   onPress,
@@ -104,6 +88,8 @@ function Boton({
   );
 }
 
+// Calendario para seleccionar o quitar la fecha objetivo de una meta.
+// Comunica la selección mediante onSeleccionar y permite cerrarlo con onCerrar.
 function CalendarioMeta({
   fecha,
   onSeleccionar,
@@ -114,14 +100,20 @@ function CalendarioMeta({
   onCerrar: () => void;
 }) {
   const hoy = new Date();
+
+  // Determina el mes inicial del calendario.
   const [mesVisible, setMesVisible] = useState(() => {
+    // Abre el mes de la fecha seleccionada si es válida.
     if (fecha && fechaLocalValida(fecha)) {
       const [anio, mes] = fecha.split("-").map(Number);
       return fechaCalendario(anio, mes - 1, 1);
     }
+
+    // Si no hay una fecha válida, abre el mes actual.
     return fechaCalendario(hoy.getFullYear(), hoy.getMonth(), 1);
   });
 
+  // Calcula el mes mostrado, su cantidad de días y los espacios iniciales.
   const anio = mesVisible.getFullYear();
   const mes = mesVisible.getMonth();
   const nombreMes = mesesCalendario[mes] ?? "";
@@ -129,6 +121,7 @@ function CalendarioMeta({
   const inicioSemana = (mesVisible.getDay() + 6) % 7;
   const fechaHoy = claveFecha(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
 
+  // Avanza o retrocede la cantidad de meses indicada.
   const cambiarMes = (paso: number) => {
     setMesVisible((actual) =>
       fechaCalendario(actual.getFullYear(), actual.getMonth() + paso, 1),
@@ -137,6 +130,7 @@ function CalendarioMeta({
 
   return (
     <ScrollView>
+      {/* Título y botón para cerrar el calendario. */}
       <View className="flex-row items-center justify-between mb-[12px]">
         <Text
           accessibilityRole="header"
@@ -156,6 +150,7 @@ function CalendarioMeta({
       </View>
 
       <View className="bg-bg rounded-[14px] p-[8px]">
+        {/* Controles para cambiar el mes visible. */}
         <View className="flex-row justify-between items-center mb-[6px]">
           <Pressable
             accessibilityRole="button"
@@ -183,6 +178,7 @@ function CalendarioMeta({
           </Pressable>
         </View>
 
+        {/* Encabezados de los días de la semana. */}
         <View className="flex-row">
           {diasSemana.map((nombre) => (
             <Text
@@ -194,11 +190,13 @@ function CalendarioMeta({
           ))}
         </View>
 
+        {/* Construye seis filas para distribuir los días del mes. */}
         {Array.from({ length: 6 }, (_, semana) => (
           <View key={semana} className="flex-row">
             {diasSemana.map((nombre, columna) => {
               const dia = semana * diasSemana.length + columna - inicioSemana + 1;
 
+              // Deja un espacio vacío si la casilla no corresponde a un día del mes.
               if (dia < 1 || dia > diasDelMes) {
                 return <View key={nombre} className="flex-1 min-h-[40px]" />;
               }
@@ -208,6 +206,7 @@ function CalendarioMeta({
               const esHoy = valor === fechaHoy;
               const etiqueta = `${dia} de ${nombreMes.toLowerCase()} de ${anio}`;
 
+              // Muestra el día y destaca la selección o la fecha actual.
               return (
                 <Pressable
                   key={nombre}
@@ -235,6 +234,7 @@ function CalendarioMeta({
         ))}
       </View>
 
+      {/* Permite eliminar una fecha previamente seleccionada. */}
       {fecha ? (
         <View className="mt-[12px]">
           <Boton
@@ -248,61 +248,83 @@ function CalendarioMeta({
   );
 }
 
+// Pantalla para administrar metas de ahorro.
+// Permite crear, editar, eliminar y registrar aportes o retiros.
 export default function ScreenSavingsGoals({
   onNav,
 }: {
   onNav: (i: number) => void;
 }) {
+  // Comprueba si esta pantalla está abierta.
   const focused = useIsFocused();
   const focusedRef = useRef(focused);
   focusedRef.current = focused;
 
+  // Controla el montaje, las respuestas de consultas y los guardados simultáneos.
   const montado = useRef(true),
     version = useRef(0),
     guardandoRef = useRef(false);
+
+  // Conserva las metas cuya eliminación está en proceso.
   const borrados = useRef(new Map<string, MetaAhorro>());
 
+  // Guarda la lista de metas y mantiene una referencia a su contenido actual.
   const [metas, setMetas] = useState<MetaAhorro[]>([]);
   const metasRef = useRef(metas);
   metasRef.current = metas;
 
+  // Controla los indicadores de carga y los mensajes de error.
   const [cargando, setCargando] = useState(true),
     [refrescando, setRefrescando] = useState(false);
   const [error, setError] = useState("");
 
+  // Controla el formulario y la meta que se está editando.
   const [formulario, setFormulario] = useState(false),
     [editando, setEditando] = useState<MetaAhorro | null>(null);
 
+  // Campos del formulario y visibilidad del calendario.
   const [eligiendoFecha, setEligiendoFecha] = useState(false);
   const [nombre, setNombre] = useState(""),
     [objetivo, setObjetivo] = useState(""),
     [inicial, setInicial] = useState("0"),
     [fecha, setFecha] = useState("");
 
+  // Controla el movimiento de ahorro que se está registrando.
   const [aporteMeta, setAporteMeta] = useState<MetaAhorro | null>(null),
     [montoAporte, setMontoAporte] = useState("");
   const [retirar, setRetirar] = useState(false),
     [guardando, setGuardando] = useState(false);
 
+  // Registra si el componente sigue montado.
+  // Al desmontarlo, invalida las respuestas de consultas pendientes.
   useEffect(() => {
     montado.current = true;
+
     return () => {
       montado.current = false;
       version.current++;
     };
   }, []);
 
+  // Consulta las metas y actualiza la lista.
+  // Oculta las que todavía tienen una eliminación en proceso.
   const cargar = useCallback(async () => {
     const solicitud = ++version.current;
+
     try {
       const nuevas = await listarMetas();
+
+      // Descarta la respuesta si el componente se desmontó o la consulta quedó desactualizada.
       if (!montado.current || solicitud !== version.current) return;
+
       setMetas(nuevas.filter((meta) => !borrados.current.has(meta.id)));
       setError("");
     } catch (e) {
+      // Muestra el error únicamente si la consulta sigue vigente y el componente está montado.
       if (montado.current && solicitud === version.current)
         setError(mensajeErrorMetas(e));
     } finally {
+      // Finaliza los indicadores de carga para la consulta vigente.
       if (montado.current && solicitud === version.current) {
         setCargando(false);
         setRefrescando(false);
@@ -310,17 +332,22 @@ export default function ScreenSavingsGoals({
     }
   }, []);
 
+  // Carga las metas al entrar e invalida las consultas pendientes al salir.
   useEffect(() => {
+    // Detiene el indicador de actualización si esta pantalla está inactiva.
     if (!focused) {
       setRefrescando(false);
       return;
     }
+
     cargar();
+
     return () => {
       version.current++;
     };
   }, [focused, cargar]);
 
+  // Limpia los campos y abre el formulario para crear una meta.
   const abrirNueva = () => {
     setEditando(null);
     setNombre("");
@@ -331,6 +358,7 @@ export default function ScreenSavingsGoals({
     setFormulario(true);
   };
 
+  // Carga los datos de una meta en el formulario de edición.
   const abrirEdicion = (meta: MetaAhorro) => {
     setEditando(meta);
     setNombre(meta.nombre);
@@ -340,8 +368,11 @@ export default function ScreenSavingsGoals({
     setFormulario(true);
   };
 
+  // Incorpora una meta confirmada a la lista local.
+  // Actualiza la existente o añade la nueva al principio de la lista.
   const aplicar = (meta: MetaAhorro) => {
     version.current++;
+
     setMetas((actuales) =>
       actuales.some((m) => m.id === meta.id)
         ? actuales.map((m) => (m.id === meta.id ? meta : m))
@@ -349,12 +380,16 @@ export default function ScreenSavingsGoals({
     );
   };
 
+  // Valida el formulario y crea o actualiza la meta.
+  // Al terminar correctamente, actualiza la lista y cierra el formulario.
   const guardar = async () => {
+    // Evita ejecutar varios guardados al mismo tiempo.
     if (guardandoRef.current) return;
 
     const monto = leerMontoMeta(objetivo),
       ahorro = leerMontoMeta(inicial);
 
+    // Exige un nombre que no esté vacío y que tenga hasta 80 caracteres.
     if (!nombre.trim() || nombre.trim().length > 80) {
       Alert.alert(
         "Nombre de la meta",
@@ -363,6 +398,7 @@ export default function ScreenSavingsGoals({
       return;
     }
 
+    // Exige un objetivo positivo y un ahorro inicial válido cuando se crea una meta.
     if (
       !Number.isFinite(monto) ||
       monto <= 0 ||
@@ -375,6 +411,7 @@ export default function ScreenSavingsGoals({
       return;
     }
 
+    // Rechaza una fecha incorrecta cuando el usuario decidió agregarla.
     if (fecha.trim() && !fechaLocalValida(fecha.trim())) {
       Alert.alert(
         "Revisa la fecha",
@@ -393,25 +430,33 @@ export default function ScreenSavingsGoals({
         fecha_objetivo: fecha.trim() || null,
       };
 
+      // Elige la operación según se esté editando una meta o creando una nueva.
       const meta = editando
         ? await actualizarMeta(editando.id, datos)
         : await crearMeta({ ...datos, monto_ahorrado: ahorro });
 
+      // Actualiza la interfaz solamente si el componente sigue montado.
       if (montado.current) {
         aplicar(meta);
         setFormulario(false);
         setError("");
       }
     } catch (e) {
+      // Muestra el error si la pantalla todavía está montada.
       if (montado.current)
         Alert.alert("No se pudo guardar", mensajeErrorMetas(e));
     } finally {
       guardandoRef.current = false;
+
+      // Finaliza el indicador de guardado si el componente sigue montado.
       if (montado.current) setGuardando(false);
     }
   };
 
+  // Solicita confirmación antes de eliminar una meta.
+  // Informa si su ahorro volverá a quedar disponible.
   const pedirEliminarMeta = (meta: MetaAhorro) => {
+    // Evita confirmar una eliminación repetida o iniciarla durante un guardado.
     if (borrados.current.has(meta.id) || guardandoRef.current) return;
 
     const mensaje = `¿Quieres eliminar la meta «${meta.nombre}» y su registro de progreso?`;
@@ -424,6 +469,7 @@ export default function ScreenSavingsGoals({
       "Eliminar meta",
       mensaje + devolucion,
       () => {
+        // Elimina solo si la pantalla sigue activa y la meta continúa en la lista.
         if (
           montado.current &&
           focusedRef.current &&
@@ -435,7 +481,10 @@ export default function ScreenSavingsGoals({
     );
   };
 
+  // Retira la meta de la lista mientras confirma su eliminación.
+  // Si la operación falla, la restaura y muestra un aviso.
   const borrar = async (meta: MetaAhorro) => {
+    // No inicia otra eliminación de la misma meta ni elimina durante un guardado.
     if (borrados.current.has(meta.id) || guardandoRef.current) return;
 
     borrados.current.set(meta.id, meta);
@@ -445,32 +494,41 @@ export default function ScreenSavingsGoals({
     try {
       await eliminarMeta(meta.id);
     } catch (e) {
+      // Restaura la meta y muestra el error si el componente sigue montado.
       if (montado.current) {
         setMetas((actuales) =>
           actuales.some((m) => m.id === meta.id)
             ? actuales
             : [...actuales, meta],
         );
+
         Alert.alert("No se pudo eliminar", mensajeErrorMetas(e));
       }
     } finally {
       borrados.current.delete(meta.id);
       version.current++;
+
+      // Recarga al terminar todas las eliminaciones pendientes si la pantalla está activa.
       if (montado.current && focusedRef.current && !borrados.current.size)
         cargar();
     }
   };
 
+  // Registra un aporte o retiro en la meta seleccionada.
+  // Los retiros se envían como montos negativos y los aportes como positivos.
   const aportar = async () => {
+    // Exige una meta seleccionada y evita movimientos simultáneos.
     if (!aporteMeta || guardandoRef.current) return;
 
     const monto = leerMontoMeta(montoAporte);
 
+    // Solicita un monto numérico, finito y mayor que cero.
     if (!Number.isFinite(monto) || monto <= 0) {
       Alert.alert("Revisa el monto", "Ingresa un monto mayor que cero.");
       return;
     }
 
+    // Impide retirar un monto mayor que el ahorro registrado en la meta.
     if (retirar && monto > aporteMeta.monto_ahorrado) {
       Alert.alert(
         "Ahorro insuficiente",
@@ -487,6 +545,8 @@ export default function ScreenSavingsGoals({
         aporteMeta.id,
         retirar ? -monto : monto,
       );
+
+      // Actualiza la meta y cierra el formulario si el componente sigue montado.
       if (montado.current) {
         aplicar(meta);
         setAporteMeta(null);
@@ -494,24 +554,31 @@ export default function ScreenSavingsGoals({
         setError("");
       }
     } catch (e) {
+      // Informa que el resultado es incierto y consulta el ahorro actualizado.
       if (montado.current) {
         setAporteMeta(null);
+
         Alert.alert(
           "Revisa el ahorro actualizado",
           "No se pudo confirmar el movimiento. Actualiza la meta antes de repetirlo para evitar un aporte duplicado.",
         );
+
         setError(
           `No se pudo confirmar el movimiento. Actualiza la meta y revisa el ahorro antes de volver a intentarlo. ${mensajeErrorMetas(e)}`,
         );
+
         // No se reintenta un aporte automáticamente: podría haberse confirmado en el servidor.
         cargar();
       }
     } finally {
       guardandoRef.current = false;
+
+      // Finaliza el indicador de guardado si el componente sigue montado.
       if (montado.current) setGuardando(false);
     }
   };
 
+  // Suma el ahorro registrado en las metas de la lista actual.
   const resumen = metas.reduce((total, m) => total + m.monto_ahorrado, 0);
 
   return (
@@ -523,6 +590,7 @@ export default function ScreenSavingsGoals({
         keyboardShouldPersistTaps="handled"
         refreshing={refrescando}
         onRefresh={() => {
+          // Actualiza las metas al deslizar la lista hacia abajo.
           setRefrescando(true);
           cargar();
         }}
@@ -530,6 +598,7 @@ export default function ScreenSavingsGoals({
           <View className="mb-[16px]">
             <TutorialCard pantalla="Metas" onNav={onNav} />
 
+            {/* Encabezado y acceso al formulario para crear una meta. */}
             <View className="flex-row justify-between items-center mb-[12px]">
               <Text className="text-[22px] font-bold text-text">
                 Metas de ahorro
@@ -548,6 +617,7 @@ export default function ScreenSavingsGoals({
               Los aportes bajan tu saldo disponible y los retiros lo aumentan.
             </Text>
 
+            {/* Abre la sección de notificaciones. */}
             <Pressable
               accessibilityRole="button"
               onPress={() => onNav(6)}
@@ -558,6 +628,7 @@ export default function ScreenSavingsGoals({
               </Text>
             </Pressable>
 
+            {/* Muestra el error de carga y permite volver a consultar. */}
             {error ? (
               <View className="bg-card p-[14px] rounded-[12px]">
                 <Text accessibilityRole="alert" className="text-error">
@@ -584,6 +655,7 @@ export default function ScreenSavingsGoals({
           )
         }
         renderItem={({ item: meta }) => {
+          // Prepara el estado de cada meta según su avance y su fecha objetivo.
           const completa = meta.monto_ahorrado >= meta.monto_objetivo;
           const dias = meta.fecha_objetivo
             ? diasHastaFecha(meta.fecha_objetivo)
@@ -596,6 +668,7 @@ export default function ScreenSavingsGoals({
 
           return (
             <View className="bg-card rounded-[16px] p-[16px] mb-[12px]">
+              {/* Nombre de la meta y porcentaje de avance. */}
               <View className="flex-row items-center justify-between mb-[12px]">
                 <Text className="text-[17px] font-bold text-text flex-1">
                   {meta.nombre}
@@ -607,6 +680,7 @@ export default function ScreenSavingsGoals({
 
               <ProgressBar percent={porcentajeMeta(meta)} color={color} />
 
+              {/* Ahorro registrado, objetivo y estado actual. */}
               <Text className="text-text mt-[10px]">
                 {dinero(meta.monto_ahorrado)} de {dinero(meta.monto_objetivo)}
               </Text>
@@ -624,11 +698,13 @@ export default function ScreenSavingsGoals({
                 </Text>
               ) : null}
 
+              {/* Acciones para registrar movimientos, editar o eliminar la meta. */}
               <View className="flex-row items-center justify-between mt-[12px]">
                 <Boton
                   texto="Registrar movimiento"
                   disabled={guardando}
                   onPress={() => {
+                    // Abre el formulario de movimientos en modo aporte.
                     setAporteMeta(meta);
                     setMontoAporte("");
                     setRetirar(false);
@@ -660,16 +736,21 @@ export default function ScreenSavingsGoals({
         }}
       />
 
+      {/* Modal para crear o editar una meta y seleccionar su fecha. */}
       <Modal
         visible={formulario && focused}
         transparent
         animationType="slide"
         onRequestClose={() => {
+          // Impide cerrar mediante esta acción mientras se guarda.
           if (guardando) return;
+
+          // Cierra primero el calendario si está abierto.
           if (eligiendoFecha) {
             setEligiendoFecha(false);
             return;
           }
+
           setFormulario(false);
         }}
       >
@@ -684,17 +765,20 @@ export default function ScreenSavingsGoals({
             <View
               className="bg-card rounded-[16px] p-[20px] max-h-[90%]"
               style={layout.modal}
-            >              {eligiendoFecha && (
-              <CalendarioMeta
-                fecha={fecha}
-                onSeleccionar={(seleccion) => {
-                  setFecha(seleccion);
-                  setEligiendoFecha(false);
-                }}
-                onCerrar={() => setEligiendoFecha(false)}
-              />
-            )}
+            >
+              {/* Calendario que actualiza la fecha y vuelve al formulario. */}
+              {eligiendoFecha && (
+                <CalendarioMeta
+                  fecha={fecha}
+                  onSeleccionar={(seleccion) => {
+                    setFecha(seleccion);
+                    setEligiendoFecha(false);
+                  }}
+                  onCerrar={() => setEligiendoFecha(false)}
+                />
+              )}
 
+              {/* Conserva el formulario oculto mientras se utiliza el calendario. */}
               <ScrollView
                 keyboardShouldPersistTaps="handled"
                 style={eligiendoFecha ? { display: "none" } : undefined}
@@ -728,6 +812,7 @@ export default function ScreenSavingsGoals({
                   className="bg-bg p-[12px] rounded-[10px] text-text mb-[12px]"
                 />
 
+                {/* El ahorro inicial se solicita únicamente al crear una meta. */}
                 {!editando ? (
                   <>
                     <Text className="text-text-secondary mb-[6px]">
@@ -759,6 +844,7 @@ export default function ScreenSavingsGoals({
                   }
                   disabled={guardando}
                   onPress={() => {
+                    // Oculta el teclado antes de abrir el calendario.
                     Keyboard.dismiss();
                     setEligiendoFecha(true);
                   }}
@@ -775,6 +861,7 @@ export default function ScreenSavingsGoals({
                   <Feather name="chevron-right" size={18} color="#512DA8" />
                 </Pressable>
 
+                {/* Guarda la meta o permite cerrar el formulario sin guardarla. */}
                 <Boton
                   texto={guardando ? "Guardando…" : "Guardar meta"}
                   onPress={guardar}
@@ -794,11 +881,13 @@ export default function ScreenSavingsGoals({
         </KeyboardAvoidingView>
       </Modal>
 
+      {/* Modal para registrar un aporte o retiro en la meta seleccionada. */}
       <Modal
         visible={aporteMeta !== null && focused}
         transparent
         animationType="fade"
         onRequestClose={() => {
+          // Permite cerrar únicamente cuando no se está guardando un movimiento.
           if (!guardando) setAporteMeta(null);
         }}
       >
@@ -813,13 +902,15 @@ export default function ScreenSavingsGoals({
             <View
               className="bg-card rounded-[16px] p-[20px]"
               style={layout.modal}
-            >              <Text className="text-[18px] font-bold text-text mb-[8px]">
+            >
+              <Text className="text-[18px] font-bold text-text mb-[8px]">
                 {aporteMeta?.nombre}
               </Text>
               <Text className="text-text-secondary mb-[12px]">
                 Ahorro actual: {dinero(aporteMeta?.monto_ahorrado || 0)}
               </Text>
 
+              {/* Selección del tipo de movimiento. */}
               <View className="flex-row gap-[8px] mb-[14px]">
                 <Boton
                   texto="Aportar"
@@ -846,6 +937,7 @@ export default function ScreenSavingsGoals({
                 className="bg-bg p-[12px] rounded-[10px] text-text mb-[16px]"
               />
 
+              {/* Registra el movimiento y adapta el texto al tipo seleccionado. */}
               <Boton
                 texto={
                   guardando
